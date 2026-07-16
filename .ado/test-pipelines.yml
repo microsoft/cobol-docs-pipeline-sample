@@ -1,0 +1,179 @@
+trigger: none
+pr: none
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  sourceRoot: tests/fixtures/sample
+  throttle: 4
+  runWorkspaceXrefPass: true
+  docsCopilotThrottle: 10
+  docsCopilotAgent: section-doc-writer
+  docsCopilotDryRun: true
+
+stages:
+- stage: DagBatchABC
+  displayName: DAG Batch Pipeline A-B-C
+  jobs:
+  - job: RunBatch
+    displayName: Run chunk -> facts -> chunk-text
+    steps:
+    - checkout: self
+
+    - task: UsePythonVersion@0
+      displayName: Use Python 3.x
+      inputs:
+        versionSpec: '3.x'
+
+    - powershell: |
+        python -m pip install --upgrade pip
+        python -m pip install pyyaml jsonschema
+      displayName: Install Python dependencies
+
+    - powershell: |
+        python scripts/validation/check-dag-integrity.py
+        if ($LASTEXITCODE) { exit 1 }
+        python scripts/validation/check-phase-order.py
+        if ($LASTEXITCODE) { exit 1 }
+        python scripts/validation/check-pipeline-dag-paths.py
+        if ($LASTEXITCODE) { exit 1 }
+        python scripts/validation/sync-glossary.py
+        if ($LASTEXITCODE) { exit 1 }
+        python scripts/validation/check-glossary-drift.py
+        if ($LASTEXITCODE) { exit 1 }
+        python -c "import json, yaml, jsonschema; jsonschema.validate(yaml.safe_load(open('config/pipeline-dag.yaml', encoding='utf-8')), json.load(open('config/pipeline-dag.schema.json', encoding='utf-8'))); print('pipeline-dag schema OK')"
+        if ($LASTEXITCODE) { exit 1 }
+      displayName: Validate pipeline DAG + config
+
+    - powershell: |
+        python -m unittest discover -s tests -p "test_*.py" -v
+      displayName: Run repository tests
+
+    - powershell: |
+        $paths = @(
+          'tests/fixtures/sample/COBOL/*.CBL'
+        )
+
+        ./scripts/run-pipeline.ps1 `
+          -Paths $paths `
+          -SourceRoot '$(sourceRoot)' `
+          -Throttle $(throttle) `
+          -ResultsDir '$(Build.SourcesDirectory)' `
+          -To C `
+          -RunWorkspaceXrefPass:$(runWorkspaceXrefPass)
+      displayName: Run DAG steps A-B-C
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish batch result XML files
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)'
+        ArtifactName: pipeline-batch-results
+        publishLocation: Container
+
+  - job: LinuxBashSmoke
+    displayName: Validate Linux Bash launchers
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: self
+
+    - task: UsePythonVersion@0
+      displayName: Use Python 3.x
+      inputs:
+        versionSpec: '3.x'
+
+    - bash: |
+        set -euo pipefail
+        python3 -m pip install --upgrade pip
+        python3 -m pip install pyyaml jsonschema
+      displayName: Install Python dependencies
+
+    - bash: |
+        set -euo pipefail
+        python3 scripts/tools/generate-bash-launchers.py --check
+        find scripts .github/skills -type f -name '*.sh' -print0 |
+          xargs -0 -n1 bash -n
+      displayName: Validate Bash launcher inventory and syntax
+
+    - bash: |
+        set -euo pipefail
+        bash scripts/run-pipeline.sh \
+          -From A -To C \
+          -Files tests/fixtures/sample/COBOL/SMOKE.CBL \
+          -SourceRoot tests/fixtures/sample \
+          -ResultsDir '$(Build.SourcesDirectory)/temp-linux' \
+          -MaxPhaseRetries 0
+      displayName: Run deterministic pipeline through Bash
+
+- stage: CopilotChunkDocs
+  displayName: Copilot Chunk Documentation
+  dependsOn: DagBatchABC
+  jobs:
+  - job: RunCopilotDocs
+    displayName: Run threaded Copilot docs orchestrator
+    steps:
+    - checkout: self
+
+    - task: UsePythonVersion@0
+      displayName: Use Python 3.x
+      inputs:
+        versionSpec: '3.x'
+
+    - powershell: |
+        python -m pip install --upgrade pip
+        python -m pip install pyyaml jsonschema
+      displayName: Install Python dependencies
+
+    - powershell: |
+        ./scripts/dispatchers/run-docs-copilot-batch.ps1 `
+          -Paths '$(sourceRoot)' `
+          -SourceRoot '$(sourceRoot)' `
+          -EnsureBundles `
+          -Agent '$(docsCopilotAgent)' `
+          -Throttle $(docsCopilotThrottle) `
+          -ResultsXml '$(Build.SourcesDirectory)/temp/copilot_doc_results.xml' `
+          -DryRun:$(docsCopilotDryRun)
+      displayName: Run Copilot per-chunk orchestrator
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish Copilot docs batch results
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)/temp/copilot_doc_results.xml'
+        ArtifactName: copilot-doc-results
+        publishLocation: Container
+
+- stage: DocumentationPortal
+  displayName: Build Documentation Website
+  dependsOn: CopilotChunkDocs
+  jobs:
+  - job: BuildPortal
+    displayName: Generate static documentation portal
+    steps:
+    - checkout: self
+
+    - task: UsePythonVersion@0
+      displayName: Use Python 3.x
+      inputs:
+        versionSpec: '3.x'
+
+    - powershell: |
+        python -m pip install --upgrade pip
+        python -m pip install markdown pymdown-extensions pyyaml jsonschema
+      displayName: Install portal build dependencies
+
+    - powershell: |
+        python ./scripts/validation/sync-glossary.py
+        python ./scripts/validation/check-glossary-drift.py
+      displayName: Validate centralized glossary is in sync
+
+    - powershell: |
+        python ./scripts/portal/build-portal-static.py --source-root '$(sourceRoot)'
+      displayName: Build documentation website
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish documentation website artifact
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)/docs/_portal/site'
+        ArtifactName: documentation-website
+        publishLocation: Container

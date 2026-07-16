@@ -1,0 +1,79 @@
+{
+  "slice_version": "1.0",
+  "source_path": "DEMO100.sample.cbl",
+  "source_kind": "cobol",
+  "source_platform": "mainframe",
+  "program_id": "DEMO100",
+  "source_sha256": "b00fd722a1b07ad8576bcfffbf41a39f8d99fd539208f3c6eb5d77df03271495",
+  "manifest_sha256": "0947ee3395b221426d17582c158c4894d755f6a6c79064e5fa14fdd6ffb8c744",
+  "facts_sha256": "323a1d738e26d11254e248216070d00036624b120acf0b0fbaebbc297f4b900f",
+  "chunk": {
+    "id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN",
+    "kind": "paragraph",
+    "name": "A000-MAIN",
+    "parent_id": "DEMO100/procedure-division/MAIN-PROCESSING",
+    "start_line": 22,
+    "end_line": 26
+  },
+  "descendant_chunk_ids": [],
+  "paragraphs": [
+    {
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN",
+      "name": "A000-MAIN",
+      "section": "MAIN-PROCESSING",
+      "start_line": 22,
+      "end_line": 26
+    }
+  ],
+  "performs": [
+    {
+      "from": "A000-MAIN",
+      "to": "A110-INIT-LOGIT",
+      "thru_to": null,
+      "kind": "simple",
+      "line": 23,
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN"
+    },
+    {
+      "from": "A000-MAIN",
+      "to": "B200-CONTROLLO-PARAMETRO",
+      "thru_to": null,
+      "kind": "simple",
+      "line": 24,
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN"
+    }
+  ],
+  "go_tos": [],
+  "calls": [
+    {
+      "from": "A000-MAIN",
+      "target": "DEMO200",
+      "kind": "call",
+      "dynamic": false,
+      "using": [
+        "WS-COUNTER"
+      ],
+      "line": 25,
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN"
+    }
+  ],
+  "copybooks": [],
+  "exec_sql": [],
+  "exec_cics": [],
+  "data_records": [],
+  "jcl_steps": [],
+  "bms_maps": [],
+  "files": [
+    {
+      "name": "INPUT-FILE",
+      "assign_to": "INFILE",
+      "organization": null,
+      "access_mode": null,
+      "record_name": "INPUT-RECORD",
+      "line": 12
+    }
+  ],
+  "incoming_xref": [],
+  "siblings": [],
+  "errors": []
+}

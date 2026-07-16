@@ -1,0 +1,141 @@
+version: 1
+owner: docs-team
+
+entries:
+  - term_it: ABEND
+    term_en: Abnormal end
+    definition_it: Terminazione anomala del job o del programma a seguito di errore bloccante.
+    definition_en: Abnormal program or job termination caused by a blocking error.
+    aliases: [Z900-ABEND, Z010-LOG-ABEND]
+
+  - term_it: ANACREDIT
+    term_en: AnaCredit
+    definition_it: Perimetro di segnalazione regolatoria dei crediti verso la banca centrale.
+    definition_en: Regulatory credit reporting perimeter towards the central bank.
+    aliases: [ANACR]
+
+  - term_it: Cessione crediti
+    term_en: Credit assignment
+    definition_it: Trasferimento del credito tra soggetti con effetti su classificazione e tracciati.
+    definition_en: Transfer of credit positions between parties with impact on classification and output feeds.
+    aliases: [CESSIONE]
+
+  - term_it: NDG
+    term_en: Customer group identifier
+    definition_it: Identificativo univoco del gruppo cliente usato nei tracciati di rischio.
+    definition_en: Unique customer-group identifier used across risk reporting feeds.
+    aliases: [NSG]
+
+  - term_it: Debitore
+    term_en: Debtor
+    definition_it: Soggetto debitore associato alla posizione segnalata.
+    definition_en: Debtor party associated with the reported exposure.
+    aliases: []
+
+  - term_it: File status
+    term_en: File status
+    definition_it: Codice COBOL di esito operazioni I/O su file (OPEN, READ, WRITE, CLOSE).
+    definition_en: COBOL status code for file I/O operations (OPEN, READ, WRITE, CLOSE).
+    aliases: [FILE-STATUS]
+
+  - term_it: Forma tecnica
+    term_en: Technical form
+    definition_it: Classificazione tecnica del rapporto usata per mapping contabile e regolatorio.
+    definition_en: Technical classification of an exposure used for accounting and regulatory mapping.
+    aliases: [FORTEC]
+
+  - term_it: GARC
+    term_en: GARC
+    definition_it: Dominio applicativo di raccordo utilizzato nei flussi prodotti dal batch.
+    definition_en: Reconciliation application domain used by generated batch flows.
+    aliases: []
+
+  - term_it: IAS
+    term_en: IAS
+    definition_it: Dominio contabile dei tracciati di raccordo per reporting civilistico.
+    definition_en: Accounting domain used by reconciliation feeds for statutory reporting.
+    aliases: [IFRS]
+
+  - term_it: IFRS9
+    term_en: IFRS 9
+    definition_it: Standard contabile usato per classificazione e valutazione del rischio di credito.
+    definition_en: Accounting standard used for classification and valuation of credit risk.
+    aliases: [IFRS 9]
+
+  - term_it: JCL
+    term_en: Job Control Language
+    definition_it: Linguaggio di controllo batch usato per eseguire job e step su mainframe.
+    definition_en: Batch control language used to execute jobs and steps on mainframe systems.
+    aliases: []
+
+  - term_it: DDNAME
+    term_en: DD name
+    definition_it: Nome logico JCL che associa un file applicativo a una risorsa fisica.
+    definition_en: Logical JCL name that binds an application file to a physical dataset.
+    aliases: [DD]
+
+  - term_it: PROC
+    term_en: Procedure
+    definition_it: Procedura JCL riusabile che incapsula step e parametri di esecuzione.
+    definition_en: Reusable JCL procedure encapsulating execution steps and parameters.
+    aliases: []
+
+  - term_it: Return code
+    term_en: Return code
+    definition_it: Codice di uscita dello step batch usato per governare i passi successivi.
+    definition_en: Batch step exit code used to control downstream execution paths.
+    aliases: [RC, RETURN-CODE]
+
+  - term_it: Raccordo
+    term_en: Reconciliation bridge
+    definition_it: Record di riconciliazione tra domini applicativi diversi (es. SISBA, IAS, GARC).
+    definition_en: Reconciliation record used to bridge different application domains (for example SISBA, IAS, GARC).
+    aliases: [RACCORDI]
+
+  - term_it: Scarto
+    term_en: Rejected record
+    definition_it: Record escluso dall'elaborazione principale e instradato su file di errore/log.
+    definition_en: Record excluded from main processing and routed to error or log outputs.
+    aliases: [SCARTO]
+
+  - term_it: Scaduto
+    term_en: Past due
+    definition_it: Posizione con pagamento oltre la scadenza contrattuale.
+    definition_en: Exposure with payment past contractual due date.
+    aliases: []
+
+  - term_it: Cedente
+    term_en: Transferor
+    definition_it: Soggetto che cede il credito o la posizione nell'ambito del processo.
+    definition_en: Party transferring a credit or exposure within the process.
+    aliases: []
+
+  - term_it: Cessione
+    term_en: Assignment
+    definition_it: Operazione di trasferimento del credito tra soggetti o veicoli.
+    definition_en: Operation that transfers a credit between parties or vehicles.
+    aliases: []
+
+  - term_it: Segnalante
+    term_en: Reporting entity
+    definition_it: Entita che produce la segnalazione verso i sistemi regolatori.
+    definition_en: Entity producing the submission toward regulatory systems.
+    aliases: []
+
+  - term_it: Tracciato
+    term_en: Record layout
+    definition_it: Struttura formale del record scambiato tra programmi, file e sistemi esterni.
+    definition_en: Formal record structure exchanged between programs, files, and external systems.
+    aliases: [TRK, LAYOUT]
+
+  - term_it: VSAM
+    term_en: VSAM dataset
+    definition_it: Dataset indicizzato mainframe usato per accesso random a chiave.
+    definition_en: Indexed mainframe dataset used for keyed random access.
+    aliases: [KSDS]
+
+  - term_it: Quadratura
+    term_en: Reconciliation check
+    definition_it: Verifica di coerenza tra totali attesi e totali prodotti.
+    definition_en: Consistency check between expected totals and generated totals.
+    aliases: [QUADRA]

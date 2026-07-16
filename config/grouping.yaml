@@ -1,0 +1,26 @@
+# Optional manual grouping manifest.
+# Validated by config/grouping.schema.json.
+#
+# The group-mode-modernizer agent picks its grouping strategy in this order:
+#   1. If this file declares groups → use them as-is.
+#   2. Else if a JCL job references the program → group by JCL job.
+#   3. Else → group by call graph rooted at the requested program.
+#
+# Each group becomes one folder under docs/flows/{_shared,it,en}/<group_id>/
+# and one folder under docs/_modernization/_groups/<group_id>/.
+
+groups:
+# Example:
+# groups:
+#   - id: "job-PAYROLL"
+#     description: "Monthly payroll batch"
+#     members:
+#       - "samples/batch/PAYROLL.cbl"
+#       - "samples/batch/PAYROLL.jcl"
+#       - "samples/copybooks/EMPREC.cpy"
+#   - id: "online-customer-inquiry"
+#     description: "CICS customer inquiry transaction"
+#     members:
+#       - "samples/cics/CUSTINQ.cbl"
+#       - "samples/cics/CUSTMAP.bms"
+#       - "samples/copybooks/CUSTREC.cpy"

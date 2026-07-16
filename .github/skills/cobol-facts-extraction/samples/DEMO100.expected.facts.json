@@ -1,0 +1,137 @@
+{
+  "facts_version": "1.0",
+  "source_path": "DEMO100.sample.cbl",
+  "source_kind": "cobol",
+  "source_platform": "mainframe",
+  "manifest_sha256": "0947ee3395b221426d17582c158c4894d755f6a6c79064e5fa14fdd6ffb8c744",
+  "source_sha256": "b00fd722a1b07ad8576bcfffbf41a39f8d99fd539208f3c6eb5d77df03271495",
+  "program_id": "DEMO100",
+  "paragraphs": [
+    {
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING",
+      "name": "MAIN-PROCESSING",
+      "section": null,
+      "start_line": 21,
+      "end_line": 26
+    },
+    {
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN",
+      "name": "A000-MAIN",
+      "section": "MAIN-PROCESSING",
+      "start_line": 22,
+      "end_line": 26
+    },
+    {
+      "chunk_id": "DEMO100/procedure-division/A110-INIT-LOGIT",
+      "name": "A110-INIT-LOGIT",
+      "section": null,
+      "start_line": 27,
+      "end_line": 28
+    },
+    {
+      "chunk_id": "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO",
+      "name": "B200-CONTROLLO-PARAMETRO",
+      "section": null,
+      "start_line": 29,
+      "end_line": 37
+    }
+  ],
+  "performs": [
+    {
+      "from": "A000-MAIN",
+      "to": "A110-INIT-LOGIT",
+      "thru_to": null,
+      "kind": "simple",
+      "line": 23,
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN"
+    },
+    {
+      "from": "A000-MAIN",
+      "to": "B200-CONTROLLO-PARAMETRO",
+      "thru_to": null,
+      "kind": "simple",
+      "line": 24,
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN"
+    }
+  ],
+  "go_tos": [],
+  "calls": [
+    {
+      "from": "A000-MAIN",
+      "target": "DEMO200",
+      "kind": "call",
+      "dynamic": false,
+      "using": [
+        "WS-COUNTER"
+      ],
+      "line": 25,
+      "chunk_id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN"
+    }
+  ],
+  "copybooks": [
+    {
+      "name": "DEMOCOM",
+      "library": null,
+      "replacing": [],
+      "line": 19,
+      "chunk_id": "DEMO100/data-division/WS-COUNTER"
+    }
+  ],
+  "exec_sql": [
+    {
+      "chunk_id": "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO/exec-sql-L31",
+      "statement": "SELECT",
+      "statement_text": "EXEC SQL SELECT COUNT(*) INTO :WS-COUNTER FROM DEMO.TPARAM END-EXEC.",
+      "tables": [
+        "DEMO.TPARAM"
+      ],
+      "cursors": [],
+      "host_vars": [
+        "WS-COUNTER"
+      ],
+      "start_line": 31,
+      "end_line": 34
+    }
+  ],
+  "exec_cics": [],
+  "data_records": [
+    {
+      "chunk_id": "DEMO100/data-division/INPUT-RECORD",
+      "name": "INPUT-RECORD",
+      "level": 1,
+      "picture": "X(80)",
+      "usage": null,
+      "redefines": null,
+      "occurs": null,
+      "start_line": 16,
+      "end_line": 17,
+      "fields": []
+    },
+    {
+      "chunk_id": "DEMO100/data-division/WS-COUNTER",
+      "name": "WS-COUNTER",
+      "level": 1,
+      "picture": "9(05)",
+      "usage": null,
+      "redefines": null,
+      "occurs": null,
+      "start_line": 18,
+      "end_line": 19,
+      "fields": []
+    }
+  ],
+  "files": [
+    {
+      "name": "INPUT-FILE",
+      "assign_to": "INFILE",
+      "organization": null,
+      "access_mode": null,
+      "record_name": "INPUT-RECORD",
+      "line": 12
+    }
+  ],
+  "jcl_steps": [],
+  "bms_maps": [],
+  "incoming_xref": [],
+  "errors": []
+}

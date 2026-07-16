@@ -1,0 +1,101 @@
+{
+  "manifest_version": "1.0",
+  "source_path": "DEMO100.sample.cbl",
+  "source_kind": "cobol",
+  "source_platform": "mainframe",
+  "encoding_detected": "utf-8",
+  "sha256": "b00fd722a1b07ad8576bcfffbf41a39f8d99fd539208f3c6eb5d77df03271495",
+  "line_count": 37,
+  "copybooks_expanded": [],
+  "chunks": [
+    {
+      "id": "DEMO100/identification-division",
+      "kind": "division",
+      "name": "IDENTIFICATION DIVISION",
+      "start_line": 1,
+      "end_line": 6,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/environment-division",
+      "kind": "division",
+      "name": "ENVIRONMENT DIVISION",
+      "start_line": 7,
+      "end_line": 12,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/data-division",
+      "kind": "division",
+      "name": "DATA DIVISION",
+      "start_line": 13,
+      "end_line": 19,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/procedure-division",
+      "kind": "division",
+      "name": "PROCEDURE DIVISION",
+      "start_line": 20,
+      "end_line": 37,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/procedure-division/MAIN-PROCESSING",
+      "kind": "section",
+      "name": "MAIN-PROCESSING",
+      "start_line": 21,
+      "end_line": 26,
+      "parent_id": "DEMO100/procedure-division"
+    },
+    {
+      "id": "DEMO100/procedure-division/A110-INIT-LOGIT",
+      "kind": "section",
+      "name": "A110-INIT-LOGIT",
+      "start_line": 27,
+      "end_line": 28,
+      "parent_id": "DEMO100/procedure-division"
+    },
+    {
+      "id": "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO",
+      "kind": "section",
+      "name": "B200-CONTROLLO-PARAMETRO",
+      "start_line": 29,
+      "end_line": 37,
+      "parent_id": "DEMO100/procedure-division"
+    },
+    {
+      "id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN",
+      "kind": "paragraph",
+      "name": "A000-MAIN",
+      "start_line": 22,
+      "end_line": 26,
+      "parent_id": "DEMO100/procedure-division/MAIN-PROCESSING"
+    },
+    {
+      "id": "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO/exec-sql-L31",
+      "kind": "exec-sql",
+      "name": "EXEC SQL @ L31",
+      "start_line": 31,
+      "end_line": 34,
+      "parent_id": "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO"
+    },
+    {
+      "id": "DEMO100/data-division/INPUT-RECORD",
+      "kind": "data-record",
+      "name": "INPUT-RECORD",
+      "start_line": 16,
+      "end_line": 17,
+      "parent_id": "DEMO100/data-division"
+    },
+    {
+      "id": "DEMO100/data-division/WS-COUNTER",
+      "kind": "data-record",
+      "name": "WS-COUNTER",
+      "start_line": 18,
+      "end_line": 19,
+      "parent_id": "DEMO100/data-division"
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,30 @@
+             PGM        PARM(&ORDERID &MODE)
+             DCL        VAR(&ORDERID) TYPE(*CHAR) LEN(10)
+             DCL        VAR(&MODE) TYPE(*CHAR) LEN(1)
+             DCL        VAR(&MSGID) TYPE(*CHAR) LEN(7)
+
+             OVRDBF     FILE(ORDERS) TOFILE(DEMODATA/ORDERS) +
+                          OVRSCOPE(*CALLLVL)
+             MONMSG     MSGID(CPF0000) EXEC(GOTO CMDLBL(FAILED))
+
+             IF         COND(&MODE *EQ 'Q') THEN(DO)
+             CALL       PGM(DEMOLIB/ORDRINQ) PARM(&ORDERID)
+             ENDDO
+
+             IF         COND(&MODE *EQ 'U') THEN(DO)
+             CALL       PGM(DEMOLIB/ORDRUPD) PARM(&ORDERID)
+             ENDDO
+
+             IF         COND(&MODE *EQ 'B') THEN(DO)
+             SBMJOB     CMD(CALL PGM(DEMOLIB/ORDRUPD) +
+                          PARM(&ORDERID)) JOB(ORDRUPD)
+             ENDDO
+
+             DLTOVR     FILE(ORDERS)
+             RETURN
+
+ FAILED:     RCVMSG     MSGTYPE(*EXCP) MSGID(&MSGID)
+             SNDPGMMSG  MSGID(CPF9898) MSGF(QCPFMSG) +
+                          MSGDTA('Order request failed: ' *CAT &MSGID) +
+                          MSGTYPE(*ESCAPE)
+             ENDPGM

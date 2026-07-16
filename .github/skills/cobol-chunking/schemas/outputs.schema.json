@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://org.local/schemas/cobol-chunking/outputs.json",
+  "title": "Chunk Manifest",
+  "description": "Deterministic outline for COBOL, CL, JCL, PROC, copybook, and BMS sources.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "source_path",
+    "source_kind",
+    "source_platform",
+    "encoding_detected",
+    "sha256",
+    "line_count",
+    "copybooks_expanded",
+    "chunks",
+    "errors"
+  ],
+  "properties": {
+    "manifest_version": { "const": "1.0" },
+    "source_path":      { "type": "string", "minLength": 1, "description": "Path relative to source_root (forward slashes)." },
+    "source_kind":      { "enum": ["cobol", "cl", "jcl", "proc", "copybook", "bms"] },
+    "source_platform": {
+      "enum": ["mainframe", "ibmi"],
+      "description": "Resolved source platform; ibmi covers IBM i (AS/400)."
+    },
+    "encoding_detected": { "type": "string", "minLength": 1 },
+    "sha256":           { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "line_count":       { "type": "integer", "minimum": 0 },
+    "copybooks_expanded": {
+      "type": "array",
+      "description": "Copybooks resolved against copybook_search_paths during chunking. Empty unless expansion is enabled.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "resolved_path"],
+        "properties": {
+          "name":          { "type": "string", "minLength": 1 },
+          "resolved_path": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "chunks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/chunk" }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "line"],
+        "properties": {
+          "code":    { "type": "string", "minLength": 1 },
+          "message": { "type": "string", "minLength": 1 },
+          "line":    { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "chunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "name", "start_line", "end_line", "parent_id"],
+      "properties": {
+        "id":   { "type": "string", "minLength": 1, "description": "Slash-delimited hierarchical id (e.g. DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN)." },
+        "kind": {
+          "enum": [
+            "division",
+            "section",
+            "paragraph",
+            "exec-sql",
+            "exec-cics",
+            "data-record",
+            "cl-program",
+            "cl-command",
+            "jcl-job",
+            "jcl-step",
+            "jcl-proc",
+            "copybook-record",
+            "bms-mapset",
+            "bms-map",
+            "bms-field"
+          ]
+        },
+        "name":       { "type": "string", "minLength": 1 },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line":   { "type": "integer", "minimum": 1 },
+        "parent_id":  { "type": ["string", "null"] }
+      }
+    }
+  }
+}

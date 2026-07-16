@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://org.example.com/schemas/grouping.schema.json",
+  "title": "Manual grouping manifest",
+  "description": "Schema for config/grouping.yaml — optional explicit grouping of source files into flow units.",
+  "type": "object",
+  "required": ["groups"],
+  "additionalProperties": false,
+  "properties": {
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "members"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Stable group identifier; becomes folder name under docs/flows/."
+          },
+          "description": { "type": "string" },
+          "members": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Source paths relative to source_root."
+          }
+        }
+      }
+    }
+  }
+}

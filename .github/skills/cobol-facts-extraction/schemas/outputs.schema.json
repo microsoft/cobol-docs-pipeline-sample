@@ -1,0 +1,354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://org.local/schemas/cobol-facts-extraction/outputs.json",
+  "title": "Facts Graph",
+  "description": "Deterministic facts for COBOL, CL, JCL, PROC, copybook, and BMS sources.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "facts_version",
+    "source_path",
+    "source_kind",
+    "source_platform",
+    "manifest_sha256",
+    "source_sha256",
+    "program_id",
+    "paragraphs",
+    "performs",
+    "go_tos",
+    "calls",
+    "copybooks",
+    "exec_sql",
+    "exec_cics",
+    "data_records",
+    "files",
+    "jcl_steps",
+    "bms_maps",
+    "incoming_xref",
+    "errors"
+  ],
+  "properties": {
+    "facts_version": { "const": "1.0" },
+    "source_path":   { "type": "string", "minLength": 1, "description": "Path relative to source_root (forward slashes)." },
+    "source_kind":   { "enum": ["cobol", "cl", "jcl", "proc", "copybook", "bms"] },
+    "source_platform": {
+      "enum": ["mainframe", "ibmi"],
+      "description": "Resolved source platform; ibmi covers IBM i (AS/400)."
+    },
+    "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "source_sha256":   { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "program_id":      { "type": ["string", "null"], "minLength": 1 },
+
+    "paragraphs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "name", "section", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":   { "type": "string", "minLength": 1 },
+          "name":       { "type": "string", "minLength": 1 },
+          "section":    { "type": ["string", "null"] },
+          "start_line": { "type": "integer", "minimum": 1 },
+          "end_line":   { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "performs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "kind", "line"],
+        "properties": {
+          "from":     { "type": "string", "minLength": 1 },
+          "to":       { "type": "string", "minLength": 1 },
+          "thru_to":  { "type": ["string", "null"] },
+          "kind":     { "enum": ["simple", "thru", "times", "until", "varying", "inline"] },
+          "line":     { "type": "integer", "minimum": 1 },
+          "chunk_id": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "go_tos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "line"],
+        "properties": {
+          "from":     { "type": "string", "minLength": 1 },
+          "to":       {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+            ]
+          },
+          "depending_on": { "type": ["string", "null"] },
+          "line":         { "type": "integer", "minimum": 1 },
+          "chunk_id":     { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "target", "kind", "dynamic", "line"],
+        "properties": {
+          "from":     { "type": "string", "minLength": 1 },
+          "target":   { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": [
+              "call", "cics-link", "cics-xctl", "exec-program",
+              "cl-call", "cl-callprc", "cl-submit-job"
+            ]
+          },
+          "dynamic":  { "type": "boolean" },
+          "using":    { "type": "array", "items": { "type": "string" } },
+          "line":     { "type": "integer", "minimum": 1 },
+          "chunk_id": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "copybooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "line"],
+        "properties": {
+          "name":      { "type": "string", "minLength": 1 },
+          "library":   { "type": ["string", "null"] },
+          "replacing": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to"],
+              "properties": {
+                "from": { "type": "string" },
+                "to":   { "type": "string" }
+              }
+            }
+          },
+          "line":     { "type": "integer", "minimum": 1 },
+          "chunk_id": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "exec_sql": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "statement", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":       { "type": "string", "minLength": 1 },
+          "statement":      { "type": "string", "minLength": 1 },
+          "statement_text": { "type": "string" },
+          "tables":         { "type": "array", "items": { "type": "string" } },
+          "cursors":        { "type": "array", "items": { "type": "string" } },
+          "host_vars":      { "type": "array", "items": { "type": "string" } },
+          "start_line":     { "type": "integer", "minimum": 1 },
+          "end_line":       { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "exec_cics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "command", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":   { "type": "string", "minLength": 1 },
+          "command":    { "type": "string", "minLength": 1 },
+          "args":       { "type": "object", "additionalProperties": { "type": "string" } },
+          "start_line": { "type": "integer", "minimum": 1 },
+          "end_line":   { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "data_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "name", "level", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":   { "type": "string", "minLength": 1 },
+          "name":       { "type": "string", "minLength": 1 },
+          "level":      { "type": "integer", "minimum": 1, "maximum": 88 },
+          "picture":    { "type": ["string", "null"] },
+          "usage":      { "type": ["string", "null"] },
+          "redefines":  { "type": ["string", "null"] },
+          "occurs":     { "type": ["integer", "null"] },
+          "start_line": { "type": "integer", "minimum": 1 },
+          "end_line":   { "type": "integer", "minimum": 1 },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["level", "name"],
+              "properties": {
+                "level":     { "type": "integer", "minimum": 1, "maximum": 49 },
+                "name":      { "type": "string", "minLength": 1 },
+                "picture":   { "type": ["string", "null"] },
+                "usage":     { "type": ["string", "null"] },
+                "redefines": { "type": ["string", "null"] },
+                "occurs":    { "type": ["integer", "null"] },
+                "line":      { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "line"],
+        "properties": {
+          "name":          { "type": "string", "minLength": 1 },
+          "assign_to":     { "type": ["string", "null"] },
+          "organization":  { "type": ["string", "null"] },
+          "access_mode":   { "type": ["string", "null"] },
+          "record_name":   { "type": ["string", "null"] },
+          "line":          { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "jcl_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "name", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":   { "type": "string", "minLength": 1 },
+          "name":       { "type": "string", "minLength": 1 },
+          "program":    { "type": ["string", "null"] },
+          "proc":       { "type": ["string", "null"] },
+          "resolved_source": { "type": ["string", "null"], "description": "Workspace source_path of the EXEC PGM=/PROC target, populated by the xref pass; null when not found in the workspace." },
+          "resolved_kind": {
+            "type": ["string", "null"],
+            "enum": ["cobol", "cl", "jcl", "proc", "copybook", "bms", null],
+            "description": "source_kind of resolved_source; null when unresolved."
+          },
+          "dds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name":   { "type": "string", "minLength": 1 },
+                "dsn":    { "type": ["string", "null"] },
+                "disp":   { "type": ["string", "null"] },
+                "inline": { "type": "boolean", "default": false }
+              }
+            }
+          },
+          "start_line": { "type": "integer", "minimum": 1 },
+          "end_line":   { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "cl_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "command", "text", "parameters", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":   { "type": "string", "minLength": 1 },
+          "command":    { "type": "string", "minLength": 1 },
+          "text":       { "type": "string", "minLength": 1 },
+          "parameters": { "type": "object", "additionalProperties": { "type": "string" } },
+          "start_line": { "type": "integer", "minimum": 1 },
+          "end_line":   { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "bms_maps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chunk_id", "mapset", "map", "start_line", "end_line"],
+        "properties": {
+          "chunk_id":   { "type": "string", "minLength": 1 },
+          "mapset":     { "type": "string", "minLength": 1 },
+          "map":        { "type": "string", "minLength": 1 },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name":    { "type": "string", "minLength": 1 },
+                "attrb":   { "type": ["string", "null"] },
+                "length":  { "type": ["integer", "null"] },
+                "initial": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "start_line": { "type": "integer", "minimum": 1 },
+          "end_line":   { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "incoming_xref": {
+      "type": "array",
+      "description": "Populated by --xref-pass (workspace scope). Empty on a fresh per-file write.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["caller_source", "via", "line"],
+        "properties": {
+          "caller_source": { "type": "string", "minLength": 1, "description": "source_path of the caller file." },
+          "caller_kind":   { "enum": ["cobol", "cl", "jcl", "proc", "copybook", "bms"] },
+          "via": {
+            "enum": [
+              "call", "cics-link", "cics-xctl", "copy", "jcl-step",
+              "cl-call", "cl-callprc", "cl-submit-job"
+            ]
+          },
+          "line":          { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code":    { "type": "string", "minLength": 1 },
+          "message": { "type": "string", "minLength": 1 },
+          "line":    { "type": ["integer", "null"], "minimum": 1 }
+        }
+      }
+    }
+  }
+}

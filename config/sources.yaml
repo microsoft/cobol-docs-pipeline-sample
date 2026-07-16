@@ -1,0 +1,107 @@
+# Source configuration for the COBOL/CL/JCL reverse-engineering pipeline.
+# Validated by config/sources.schema.json.
+#
+# This file tells every agent WHERE the source code lives, WHICH files to
+# process, HOW to decode them, WHICH doc profiles to render, and WHICH
+# modernization targets to emit artifacts for.
+
+# Absolute path to the folder containing the COBOL/JCL sources.
+# Sources are NEVER copied into this repo; agents read them by reference.
+# For local testing, you can point this at the bundled `samples/` folder.
+source_root: "./repos/sample"
+
+# Include / exclude globs (relative to source_root). Evaluated in order.
+include:
+  - "**/*.cbl"
+  - "**/*.cob"
+  - "**/*.cblle"
+  - "**/*.sqlcblle"
+  - "**/*.cl"
+  - "**/*.clp"
+  - "**/*.clle"
+  - "**/*.jcl"
+  - "**/*.prc"
+  - "**/*.cpy"
+  - "**/*.bms"
+
+exclude:
+  - "**/archive/**"
+  - "**/old/**"
+  # samples/COBOL/COPY/*.COB are copybooks (despite the .COB extension),
+  # not full programs. Exclude them from the main pipeline; they are
+  # consumed by reference via copybook_search_paths.
+  - "COBOL/COPY/**"
+
+# Per-file encoding override. Keys are globs (relative to source_root).
+# Use "auto" to delegate detection to the cobol-chunking skill.
+encodings:
+  "**/*.cbl": "auto"
+  "**/*.cob": "auto"
+  "**/*.cblle": "auto"
+  "**/*.sqlcblle": "auto"
+  "**/*.cl": "auto"
+  "**/*.clp": "auto"
+  "**/*.clle": "auto"
+  "**/*.jcl": "auto"
+  "**/*.cpy": "auto"
+  "**/*.bms": "auto"
+  "**/*.prc": "auto"
+
+# COBOL platform selection. "auto" detects IBM i from member extensions and
+# IBM i-specific source constructs while retaining z/OS/mainframe behavior.
+# Use `platforms` when one source tree contains both platforms.
+platform: "auto"
+platforms:
+  "**/*.cblle": "ibmi"
+  "**/*.sqlcblle": "ibmi"
+  "**/*.cl": "ibmi"
+  "**/*.clp": "ibmi"
+  "**/*.clle": "ibmi"
+  "QCPYSRC/**": "ibmi"
+
+# Default doc profiles. Override per-invocation with --profile-fa / --profile-req.
+functional_analysis_profile: "default"
+requirements_profile: "default"
+
+# Copybook search paths (resolved relative to source_root).
+copybook_search_paths:
+  - "COBOL/COPY"
+  - "QCPYSRC"
+  - "copybooks"
+
+# Pipeline execution model — drives the orchestrator and `scripts/run-pipeline.ps1`.
+#
+# `execution_mode`:
+#   - `per-file-loop` (default): loop over every source file and run all
+#     file-scoped phases (those with `runs_in: per-file-loop` in
+#     `config/pipeline-dag.yaml`) end-to-end for that file before moving
+#     to the next. After every file has completed the per-file loop, the
+#     workspace-scoped phases (`runs_in: workspace`) run once in DAG order.
+#   - `per-phase`: legacy mode — run every phase across all files in DAG
+#     order (A over all files, then B over all files, …). Kept for
+#     debugging / reproducibility against earlier runs.
+#
+# `per_file_parallelism`:
+#   Maximum number of files processed concurrently when
+#   `execution_mode: per-file-loop`. `1` = strict sequential (one file
+#   end-to-end at a time, default). `>1` enables N parallel per-file
+#   threads — each thread owns one file and executes its file-scoped
+#   phases independently. Workspace-scoped phases always run
+#   sequentially after the loop joins.
+pipeline:
+  execution_mode: "per-file-loop"
+  per_file_parallelism: 1
+
+# Modernization configuration — drives the file/group modernizer agents and
+# the cobol-to-target-mapping skill.
+modernization:
+  # One or both of: java, dotnet. Both ship by default.
+  target_languages:
+    - java
+    - dotnet
+  # Orchestration target for JCL → modern scheduler conversion.
+  # One of: spring-batch | azure-functions | airflow | step-functions
+  orchestration_target: "spring-batch"
+  # DB target for DB2 SQL → modern DB conversion.
+  # One of: postgres | sqlserver | db2 | as-is
+  db_target: "postgres"

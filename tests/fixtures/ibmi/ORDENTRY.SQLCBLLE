@@ -1,0 +1,33 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ORDENTRY.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT ORDER-FILE ASSIGN TO DATABASE-ORDERS
+               ORGANIZATION IS INDEXED
+               ACCESS MODE IS DYNAMIC
+               RECORD KEY IS ORDER-ID.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  ORDER-FILE.
+       01  ORDER-RECORD.
+           05 ORDER-ID PIC 9(9).
+           05 ORDER-STATUS PIC X(10).
+       WORKING-STORAGE SECTION.
+       01  WS-ORDER-ID PIC 9(9).
+       PROCEDURE DIVISION.
+       MAIN-PROCESSING SECTION.
+       A000-MAIN.
+           EXEC SQL
+               SET OPTION COMMIT = *NONE, CLOSQLCSR = *ENDMOD
+           END-EXEC.
+           PERFORM A100-READ-ORDER
+           GOBACK.
+       A100-READ-ORDER.
+           EXEC SQL
+               SELECT STATUS
+                 INTO :ORDER-STATUS
+                 FROM ORDERS
+                WHERE ORDER_ID = :WS-ORDER-ID
+           END-EXEC.
+           EXIT.

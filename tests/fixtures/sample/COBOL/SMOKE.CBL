@@ -1,0 +1,9 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. SMOKE.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-RESULT                    PIC 9 VALUE 0.
+       PROCEDURE DIVISION.
+       MAIN-PARAGRAPH.
+           MOVE 1 TO WS-RESULT
+           GOBACK.

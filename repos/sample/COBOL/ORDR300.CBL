@@ -1,0 +1,249 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ORDR300.
+      *---------------------------------------------------------------*
+      * Publish detail rows, per-channel summaries, and batch controls.
+      *---------------------------------------------------------------*
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT IN-CALC ASSIGN TO ORDRWK2
+               ORGANIZATION IS SEQUENTIAL.
+           SELECT OUT-STATEMENT ASSIGN TO ORDRSTM
+               ORGANIZATION IS SEQUENTIAL.
+           SELECT OUT-CONTROL ASSIGN TO ORDRCTL
+               ORGANIZATION IS SEQUENTIAL.
+
+       DATA DIVISION.
+       FILE SECTION.
+       FD  IN-CALC
+           RECORD CONTAINS 240 CHARACTERS
+           BLOCK CONTAINS 0 RECORDS.
+       COPY ORDRWK01.
+
+       FD  OUT-STATEMENT
+           RECORD CONTAINS 240 CHARACTERS
+           BLOCK CONTAINS 0 RECORDS.
+       COPY ORDROUT1.
+
+       FD  OUT-CONTROL
+           RECORD CONTAINS 120 CHARACTERS
+           BLOCK CONTAINS 0 RECORDS.
+       COPY ORDRCTL1.
+
+       WORKING-STORAGE SECTION.
+       01  WS-END                        PIC X VALUE 'N'.
+           88 END-OF-FILE                VALUE 'Y'.
+
+       01  WS-COUNTERS.
+           05 WS-READ                    PIC 9(9) VALUE ZERO.
+           05 WS-WRITTEN                 PIC 9(9) VALUE ZERO.
+
+       01  WS-BATCH-TOTALS.
+           05 WS-TOTAL-SUB               PIC 9(13)V99 VALUE ZERO.
+           05 WS-TOTAL-DISCOUNT          PIC 9(13)V99 VALUE ZERO.
+           05 WS-TOTAL-NET               PIC 9(13)V99 VALUE ZERO.
+           05 WS-TOTAL-TAX               PIC 9(13)V99 VALUE ZERO.
+           05 WS-TOTAL-GRAND             PIC 9(13)V99 VALUE ZERO.
+           05 WS-TOTAL-EUR               PIC 9(13)V99 VALUE ZERO.
+
+       01  WS-CHANNEL-TOTALS.
+           05 WS-ONL-CNT                 PIC 9(9) VALUE ZERO.
+           05 WS-ONL-EUR                 PIC 9(13)V99 VALUE ZERO.
+           05 WS-RTL-CNT                 PIC 9(9) VALUE ZERO.
+           05 WS-RTL-EUR                 PIC 9(13)V99 VALUE ZERO.
+           05 WS-PAR-CNT                 PIC 9(9) VALUE ZERO.
+           05 WS-PAR-EUR                 PIC 9(13)V99 VALUE ZERO.
+
+       PROCEDURE DIVISION.
+       MAIN-SECTION.
+           DISPLAY '*** PHASE ORDR300 RUNNING ***'
+           OPEN INPUT IN-CALC
+                OUTPUT OUT-STATEMENT OUT-CONTROL
+
+           PERFORM UNTIL END-OF-FILE
+               READ IN-CALC
+                   AT END
+                       SET END-OF-FILE TO TRUE
+                   NOT AT END
+                       ADD 1 TO WS-READ
+                       PERFORM WRITE-DETAIL
+                       PERFORM ACCUMULATE-TOTALS
+               END-READ
+           END-PERFORM
+
+           PERFORM WRITE-CHANNEL-SUMMARIES
+           PERFORM WRITE-GLOBAL-SUMMARY
+           PERFORM WRITE-CONTROL-RECORDS
+
+           CLOSE IN-CALC OUT-STATEMENT OUT-CONTROL
+
+           DISPLAY 'ORDR300 READ    : ' WS-READ
+           DISPLAY 'ORDR300 WRITTEN : ' WS-WRITTEN
+
+           GOBACK.
+
+       WRITE-DETAIL.
+           MOVE SPACES                    TO ORDR-OUT-REC
+           MOVE 'D'                       TO ORDR-OUT-TYPE
+           MOVE ORDR-WK-ORDER-ID          TO ORDR-OUT-ORDER-ID
+           MOVE ORDR-WK-CUSTOMER-ID       TO ORDR-OUT-CUSTOMER-ID
+           MOVE ORDR-WK-CUSTOMER-NAME     TO ORDR-OUT-CUSTOMER-NAME
+           MOVE ORDR-WK-PRODUCT-CODE      TO ORDR-OUT-PRODUCT-CODE
+           MOVE ORDR-WK-PRODUCT-CATEGORY  TO ORDR-OUT-CATEGORY
+           MOVE ORDR-WK-CUSTOMER-SEGMENT  TO ORDR-OUT-SEGMENT
+           MOVE ORDR-WK-QUANTITY          TO ORDR-OUT-QUANTITY
+           MOVE ORDR-WK-UNIT-PRICE        TO ORDR-OUT-UNIT-PRICE
+           MOVE ORDR-WK-SUBTOTAL          TO ORDR-OUT-SUBTOTAL
+           MOVE ORDR-WK-DISCOUNT-AMOUNT   TO ORDR-OUT-DISCOUNT
+           MOVE ORDR-WK-NET-AMOUNT        TO ORDR-OUT-NET
+           MOVE ORDR-WK-TAX-AMOUNT        TO ORDR-OUT-TAX-AMOUNT
+           MOVE ORDR-WK-TOTAL-AMOUNT      TO ORDR-OUT-TOTAL-AMOUNT
+           MOVE ORDR-WK-TOTAL-EUR         TO ORDR-OUT-TOTAL-EUR
+           MOVE ORDR-WK-ORDER-DATE        TO ORDR-OUT-ORDER-DATE
+           MOVE ORDR-WK-CHANNEL           TO ORDR-OUT-CHANNEL
+           MOVE ORDR-WK-CURRENCY          TO ORDR-OUT-CURRENCY
+           MOVE ORDR-WK-REGION            TO ORDR-OUT-REGION
+           MOVE ORDR-WK-SHIP-MODE         TO ORDR-OUT-SHIP-MODE
+           MOVE ORDR-WK-PROMO-CODE        TO ORDR-OUT-PROMO-CODE
+
+           WRITE ORDR-OUT-REC
+           ADD 1 TO WS-WRITTEN.
+
+       ACCUMULATE-TOTALS.
+           ADD ORDR-WK-SUBTOTAL        TO WS-TOTAL-SUB
+           ADD ORDR-WK-DISCOUNT-AMOUNT TO WS-TOTAL-DISCOUNT
+           ADD ORDR-WK-NET-AMOUNT      TO WS-TOTAL-NET
+           ADD ORDR-WK-TAX-AMOUNT      TO WS-TOTAL-TAX
+           ADD ORDR-WK-TOTAL-AMOUNT    TO WS-TOTAL-GRAND
+           ADD ORDR-WK-TOTAL-EUR       TO WS-TOTAL-EUR
+
+           EVALUATE ORDR-WK-CHANNEL
+               WHEN 'ONLINE    '
+                   ADD 1 TO WS-ONL-CNT
+                   ADD ORDR-WK-TOTAL-EUR TO WS-ONL-EUR
+               WHEN 'RETAIL    '
+                   ADD 1 TO WS-RTL-CNT
+                   ADD ORDR-WK-TOTAL-EUR TO WS-RTL-EUR
+               WHEN 'PARTNER   '
+                   ADD 1 TO WS-PAR-CNT
+                   ADD ORDR-WK-TOTAL-EUR TO WS-PAR-EUR
+               WHEN OTHER
+                   CONTINUE
+           END-EVALUATE.
+
+       WRITE-CHANNEL-SUMMARIES.
+           MOVE SPACES                   TO ORDR-OUT-REC
+           MOVE 'C'                      TO ORDR-OUT-TYPE
+           MOVE 'ONLINE      '           TO ORDR-OUT-ORDER-ID
+           MOVE WS-ONL-EUR               TO ORDR-OUT-TOTAL-EUR
+           WRITE ORDR-OUT-REC
+           ADD 1 TO WS-WRITTEN
+
+           MOVE SPACES                   TO ORDR-OUT-REC
+           MOVE 'C'                      TO ORDR-OUT-TYPE
+           MOVE 'RETAIL      '           TO ORDR-OUT-ORDER-ID
+           MOVE WS-RTL-EUR               TO ORDR-OUT-TOTAL-EUR
+           WRITE ORDR-OUT-REC
+           ADD 1 TO WS-WRITTEN
+
+           MOVE SPACES                   TO ORDR-OUT-REC
+           MOVE 'C'                      TO ORDR-OUT-TYPE
+           MOVE 'PARTNER     '           TO ORDR-OUT-ORDER-ID
+           MOVE WS-PAR-EUR               TO ORDR-OUT-TOTAL-EUR
+           WRITE ORDR-OUT-REC
+           ADD 1 TO WS-WRITTEN.
+
+       WRITE-GLOBAL-SUMMARY.
+           MOVE SPACES                   TO ORDR-OUT-REC
+           MOVE 'S'                      TO ORDR-OUT-TYPE
+           MOVE 'BATCH-TOTALS'           TO ORDR-OUT-ORDER-ID
+           MOVE WS-TOTAL-SUB             TO ORDR-OUT-SUBTOTAL
+           MOVE WS-TOTAL-DISCOUNT        TO ORDR-OUT-DISCOUNT
+           MOVE WS-TOTAL-NET             TO ORDR-OUT-NET
+           MOVE WS-TOTAL-TAX             TO ORDR-OUT-TAX-AMOUNT
+           MOVE WS-TOTAL-GRAND           TO ORDR-OUT-TOTAL-AMOUNT
+           MOVE WS-TOTAL-EUR             TO ORDR-OUT-TOTAL-EUR
+           WRITE ORDR-OUT-REC
+           ADD 1 TO WS-WRITTEN.
+
+       WRITE-CONTROL-RECORDS.
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'ORDERS_PROCESSED    ' TO ORDR-CTL-METRIC
+           MOVE 'GLOBAL    ' TO ORDR-CTL-CHANNEL
+           MOVE 'C' TO ORDR-CTL-MEASURE-TYPE
+           MOVE WS-READ TO ORDR-CTL-COUNT-VALUE
+           MOVE ZERO TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'STATEMENT_ROWS      ' TO ORDR-CTL-METRIC
+           MOVE 'GLOBAL    ' TO ORDR-CTL-CHANNEL
+           MOVE 'C' TO ORDR-CTL-MEASURE-TYPE
+           MOVE WS-WRITTEN TO ORDR-CTL-COUNT-VALUE
+           MOVE ZERO TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'TOTAL_EUR           ' TO ORDR-CTL-METRIC
+           MOVE 'GLOBAL    ' TO ORDR-CTL-CHANNEL
+           MOVE 'A' TO ORDR-CTL-MEASURE-TYPE
+           MOVE ZERO TO ORDR-CTL-COUNT-VALUE
+           MOVE WS-TOTAL-EUR TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'ORDER_COUNT         ' TO ORDR-CTL-METRIC
+           MOVE 'ONLINE    ' TO ORDR-CTL-CHANNEL
+           MOVE 'C' TO ORDR-CTL-MEASURE-TYPE
+           MOVE WS-ONL-CNT TO ORDR-CTL-COUNT-VALUE
+           MOVE ZERO TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'TOTAL_EUR           ' TO ORDR-CTL-METRIC
+           MOVE 'ONLINE    ' TO ORDR-CTL-CHANNEL
+           MOVE 'A' TO ORDR-CTL-MEASURE-TYPE
+           MOVE ZERO TO ORDR-CTL-COUNT-VALUE
+           MOVE WS-ONL-EUR TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'ORDER_COUNT         ' TO ORDR-CTL-METRIC
+           MOVE 'RETAIL    ' TO ORDR-CTL-CHANNEL
+           MOVE 'C' TO ORDR-CTL-MEASURE-TYPE
+           MOVE WS-RTL-CNT TO ORDR-CTL-COUNT-VALUE
+           MOVE ZERO TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'TOTAL_EUR           ' TO ORDR-CTL-METRIC
+           MOVE 'RETAIL    ' TO ORDR-CTL-CHANNEL
+           MOVE 'A' TO ORDR-CTL-MEASURE-TYPE
+           MOVE ZERO TO ORDR-CTL-COUNT-VALUE
+           MOVE WS-RTL-EUR TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'ORDER_COUNT         ' TO ORDR-CTL-METRIC
+           MOVE 'PARTNER   ' TO ORDR-CTL-CHANNEL
+           MOVE 'C' TO ORDR-CTL-MEASURE-TYPE
+           MOVE WS-PAR-CNT TO ORDR-CTL-COUNT-VALUE
+           MOVE ZERO TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC
+
+           MOVE SPACES TO ORDR-CTL-REC
+           MOVE 'ORDR300 ' TO ORDR-CTL-RUN-ID
+           MOVE 'TOTAL_EUR           ' TO ORDR-CTL-METRIC
+           MOVE 'PARTNER   ' TO ORDR-CTL-CHANNEL
+           MOVE 'A' TO ORDR-CTL-MEASURE-TYPE
+           MOVE ZERO TO ORDR-CTL-COUNT-VALUE
+           MOVE WS-PAR-EUR TO ORDR-CTL-AMOUNT-VALUE
+           WRITE ORDR-CTL-REC.

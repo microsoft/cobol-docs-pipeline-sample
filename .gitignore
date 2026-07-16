@@ -1,0 +1,48 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node (if used for tooling)
+node_modules/
+
+# Build/test output
+coverage/
+htmlcov/
+site/
+*.log
+*.zip
+
+# Repo-local temp artifacts
+temp/
+logs/
+docs/
+#repos/
+
+# Generated pipeline result files (execution outputs)
+# These are now saved to temp/ directory by default
+chunk_results.xml
+chunk_text_results.xml
+facts_results.xml
+slice_results.xml
+copilot_*.xml
+complete_*.xml
+diagrams_*.xml
+fa_*.xml
+req_*.xml
+stage_results.xml
+finalize_stage_results.xml

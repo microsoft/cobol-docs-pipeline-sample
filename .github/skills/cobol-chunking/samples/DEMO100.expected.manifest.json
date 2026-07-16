@@ -1,0 +1,93 @@
+{
+  "manifest_version": "1.0",
+  "source_path": "DEMO100.sample.cbl",
+  "source_kind": "cobol",
+  "source_platform": "mainframe",
+  "encoding_detected": "utf-8",
+  "sha256": "721358ac92044f08482507d8e006af5fc3a1d0b556f6e5d9b23b805b6a14d41e",
+  "line_count": 31,
+  "copybooks_expanded": [],
+  "chunks": [
+    {
+      "id": "DEMO100/identification-division",
+      "kind": "division",
+      "name": "IDENTIFICATION DIVISION",
+      "start_line": 1,
+      "end_line": 6,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/environment-division",
+      "kind": "division",
+      "name": "ENVIRONMENT DIVISION",
+      "start_line": 7,
+      "end_line": 12,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/data-division",
+      "kind": "division",
+      "name": "DATA DIVISION",
+      "start_line": 13,
+      "end_line": 18,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/procedure-division",
+      "kind": "division",
+      "name": "PROCEDURE DIVISION",
+      "start_line": 19,
+      "end_line": 31,
+      "parent_id": null
+    },
+    {
+      "id": "DEMO100/procedure-division/MAIN-PROCESSING",
+      "kind": "section",
+      "name": "MAIN-PROCESSING",
+      "start_line": 20,
+      "end_line": 24,
+      "parent_id": "DEMO100/procedure-division"
+    },
+    {
+      "id": "DEMO100/procedure-division/A110-INIT-LOGIT",
+      "kind": "section",
+      "name": "A110-INIT-LOGIT",
+      "start_line": 25,
+      "end_line": 26,
+      "parent_id": "DEMO100/procedure-division"
+    },
+    {
+      "id": "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO",
+      "kind": "section",
+      "name": "B200-CONTROLLO-PARAMETRO",
+      "start_line": 27,
+      "end_line": 31,
+      "parent_id": "DEMO100/procedure-division"
+    },
+    {
+      "id": "DEMO100/procedure-division/MAIN-PROCESSING/A000-MAIN",
+      "kind": "paragraph",
+      "name": "A000-MAIN",
+      "start_line": 21,
+      "end_line": 24,
+      "parent_id": "DEMO100/procedure-division/MAIN-PROCESSING"
+    },
+    {
+      "id": "DEMO100/data-division/INPUT-RECORD",
+      "kind": "data-record",
+      "name": "INPUT-RECORD",
+      "start_line": 16,
+      "end_line": 17,
+      "parent_id": "DEMO100/data-division"
+    },
+    {
+      "id": "DEMO100/data-division/WS-COUNTER",
+      "kind": "data-record",
+      "name": "WS-COUNTER",
+      "start_line": 18,
+      "end_line": 18,
+      "parent_id": "DEMO100/data-division"
+    }
+  ],
+  "errors": []
+}

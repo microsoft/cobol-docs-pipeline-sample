@@ -1,0 +1,42 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ORDRUPD.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SOURCE-COMPUTER. IBM-I.
+       OBJECT-COMPUTER. IBM-I.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AUDIT-DETAIL.
+           05 WS-AUDIT-ORDER-ID PIC X(10).
+           05 WS-AUDIT-ACTION   PIC X(10).
+           05 WS-AUDIT-RESULT   PIC X(10).
+       LINKAGE SECTION.
+       01  LK-ORDER-ID           PIC X(10).
+       PROCEDURE DIVISION USING LK-ORDER-ID.
+       MAIN-PROCESSING SECTION.
+       A000-MAIN.
+           EXEC SQL
+               SET OPTION COMMIT = *CHG,
+                          CLOSQLCSR = *ENDMOD
+           END-EXEC
+           PERFORM A100-UPDATE-ORDER
+           GOBACK.
+
+       A100-UPDATE-ORDER.
+           MOVE LK-ORDER-ID TO WS-AUDIT-ORDER-ID
+           MOVE 'SET-READY' TO WS-AUDIT-ACTION
+           EXEC SQL
+               UPDATE ORDERS
+                  SET ORDER_STATUS = 'READY',
+                      UPDATED_AT = CURRENT_TIMESTAMP
+                WHERE ORDER_ID = :LK-ORDER-ID
+           END-EXEC
+           IF SQLCODE = 0
+               EXEC SQL COMMIT END-EXEC
+               MOVE 'SUCCESS' TO WS-AUDIT-RESULT
+           ELSE
+               EXEC SQL ROLLBACK END-EXEC
+               MOVE 'FAILED' TO WS-AUDIT-RESULT
+           END-IF
+           CALL 'ORDRAUD' USING WS-AUDIT-DETAIL
+           EXIT.

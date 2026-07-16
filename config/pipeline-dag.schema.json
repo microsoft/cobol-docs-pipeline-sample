@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://org.example.com/schemas/pipeline-dag.schema.json",
+  "title": "COBOL modernization pipeline DAG",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "phases"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "supported_platforms": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["mainframe", "ibmi"]
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "COBOL source platforms supported end-to-end by every phase."
+    },
+    "max_parallel": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Default cap on concurrent subagents per phase. Overridable per phase."
+    },
+    "templates": {
+      "type": "object",
+      "description": "Document template profile configuration for phases F, G, L, M (requirements, functional_analysis, technical_analysis).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Default profile name when per-file auto-detection yields none."
+          },
+          "profile_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repo-relative directory holding the profile family for this doc type."
+          }
+        }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/phase" }
+    }
+  },
+  "definitions": {
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "parallelism", "depends_on"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parallelism": {
+          "type": "string",
+          "enum": ["per-file", "per-group", "per-file-and-per-group", "per-section", "fan-in"]
+        },
+        "runs_in": {
+          "type": "string",
+          "enum": ["per-file-loop", "workspace"],
+          "default": "per-file-loop",
+          "description": "Execution wave: 'per-file-loop' phases run inside the per-file loop (once per source file, optionally in parallel threads when sources.yaml pipeline.per_file_parallelism > 1). 'workspace' phases run once after every file has cleared the per-file loop."
+        },
+        "max_parallel": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Override the global max_parallel cap for this phase."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*$"
+          },
+          "uniqueItems": true
+        },
+        "config": {
+          "type": "object",
+          "description": "Free-form phase-scoped configuration consumed by the orchestrator (e.g. per-phase target_languages overrides).",
+          "properties": {
+            "target_languages": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+              },
+              "uniqueItems": true,
+              "description": "ISO 639-1 codes (optionally region-suffixed) that non-EN docs are co-authored in (bound to the orchestrator -Languages set). 'en' MUST NOT appear here."
+            }
+          }
+        },
+        "agents": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/agentStep" },
+          "default": []
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        }
+      },
+      "anyOf": [
+        { "required": ["agents"] },
+        { "required": ["scripts"] }
+      ]
+    },
+    "agentStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "inputs", "outputs"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["per-file", "per-group", "per-section", "workspace"]
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["artifact_path", "kind"],
+                "properties": {
+                  "artifact_path": { "type": "string", "minLength": 1 },
+                  "kind": { "type": "string", "minLength": 1 },
+                  "language": { "type": "string", "minLength": 1 }
+                }
+              }
+            ]
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "scripts": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

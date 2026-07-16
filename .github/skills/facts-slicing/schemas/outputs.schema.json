@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://org.local/schemas/facts-slicing/outputs.json",
+  "title": "Facts Slice",
+  "description": "Per-chunk facts slice produced by skills/facts-slicing/scripts/slice-facts.py. One file per chunk under docs/_shared/<file>/facts-slices/<chunk_id_sanitized>.json. Read-only input for phase C per-section subagents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slice_version",
+    "source_path",
+    "source_kind",
+    "source_platform",
+    "program_id",
+    "source_sha256",
+    "manifest_sha256",
+    "facts_sha256",
+    "chunk",
+    "descendant_chunk_ids",
+    "paragraphs",
+    "performs",
+    "go_tos",
+    "calls",
+    "copybooks",
+    "exec_sql",
+    "exec_cics",
+    "data_records",
+    "files",
+    "jcl_steps",
+    "cl_commands",
+    "bms_maps",
+    "incoming_xref",
+    "siblings",
+    "errors"
+  ],
+  "properties": {
+    "slice_version":   { "const": "1.0" },
+    "source_path":     { "type": "string", "minLength": 1 },
+    "source_kind":     { "enum": ["cobol", "cl", "jcl", "proc", "copybook", "bms"] },
+    "source_platform": { "enum": ["mainframe", "ibmi"] },
+    "program_id":      { "type": ["string", "null"], "minLength": 1 },
+    "source_sha256":   { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "facts_sha256":    { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+
+    "chunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "name", "parent_id", "start_line", "end_line"],
+      "properties": {
+        "id":         { "type": "string", "minLength": 1 },
+        "kind":       { "type": "string", "minLength": 1 },
+        "name":       { "type": "string", "minLength": 1 },
+        "parent_id":  { "type": ["string", "null"] },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line":   { "type": "integer", "minimum": 1 }
+      }
+    },
+
+    "descendant_chunk_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+
+    "paragraphs":   { "type": "array" },
+    "performs":     { "type": "array" },
+    "go_tos":       { "type": "array" },
+    "calls":        { "type": "array" },
+    "copybooks":    { "type": "array" },
+    "exec_sql":     { "type": "array" },
+    "exec_cics":    { "type": "array" },
+    "data_records": { "type": "array" },
+    "files":        { "type": "array" },
+    "jcl_steps":    { "type": "array" },
+    "cl_commands":  { "type": "array" },
+    "bms_maps":     { "type": "array" },
+    "incoming_xref":{ "type": "array" },
+
+    "siblings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "name"],
+        "properties": {
+          "id":   { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code":    { "type": "string", "minLength": 1 },
+          "message": { "type": "string", "minLength": 1 },
+          "line":    { "type": ["integer", "null"], "minimum": 1 }
+        }
+      }
+    }
+  }
+}

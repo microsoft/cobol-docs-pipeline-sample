@@ -1,0 +1,44 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ORDRINQ.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SOURCE-COMPUTER. IBM-I.
+       OBJECT-COMPUTER. IBM-I.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CUSTOMER-ID        PIC X(10).
+       01  WS-ORDER-STATUS       PIC X(10).
+       01  WS-ORDER-TOTAL        PIC S9(9)V99 COMP-3.
+       01  WS-SQL-STATUS         PIC S9(9) COMP-5.
+       LINKAGE SECTION.
+       01  LK-ORDER-ID           PIC X(10).
+       PROCEDURE DIVISION USING LK-ORDER-ID.
+       MAIN-PROCESSING SECTION.
+       A000-MAIN.
+           EXEC SQL
+               SET OPTION COMMIT = *NONE,
+                          CLOSQLCSR = *ENDMOD
+           END-EXEC
+           PERFORM A100-READ-ORDER
+           GOBACK.
+
+       A100-READ-ORDER.
+           EXEC SQL
+               SELECT CUSTOMER_ID,
+                      ORDER_STATUS,
+                      ORDER_TOTAL
+                 INTO :WS-CUSTOMER-ID,
+                      :WS-ORDER-STATUS,
+                      :WS-ORDER-TOTAL
+                 FROM ORDERS
+                WHERE ORDER_ID = :LK-ORDER-ID
+           END-EXEC
+           MOVE SQLCODE TO WS-SQL-STATUS
+           IF SQLCODE = 0
+               DISPLAY 'ORDER ' LK-ORDER-ID
+                       ' CUSTOMER ' WS-CUSTOMER-ID
+                       ' STATUS ' WS-ORDER-STATUS
+           ELSE
+               DISPLAY 'ORDER NOT FOUND, SQLCODE=' WS-SQL-STATUS
+           END-IF
+           EXIT.

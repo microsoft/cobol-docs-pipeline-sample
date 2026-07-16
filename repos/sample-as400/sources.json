@@ -1,0 +1,27 @@
+[
+  {
+    "path": "repos/sample-as400/QCLSRC/ORDRJOB.CLLE",
+    "sourceRoot": "repos/sample-as400",
+    "platform": "ibmi"
+  },
+  {
+    "path": "repos/sample-as400/QCBLSRC/ORDRAUD.CBLLE",
+    "sourceRoot": "repos/sample-as400",
+    "platform": "ibmi"
+  },
+  {
+    "path": "repos/sample-as400/QCBLSRC/ORDRINQ.SQLCBLLE",
+    "sourceRoot": "repos/sample-as400",
+    "platform": "ibmi"
+  },
+  {
+    "path": "repos/sample-as400/QCBLSRC/ORDRUPD.SQLCBLLE",
+    "sourceRoot": "repos/sample-as400",
+    "platform": "ibmi"
+  },
+  {
+    "path": "repos/sample-as400/QCPYSRC/ORDAUDR.CPY",
+    "sourceRoot": "repos/sample-as400",
+    "platform": "ibmi"
+  }
+]

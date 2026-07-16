@@ -1,0 +1,833 @@
+# Shared pipeline DAG definition.
+# Consumed by BOTH the cobol-modernization-orchestrator.agent.md AND
+# scripts/run-pipeline.ps1 so they stay in sync.
+#
+# Each phase declares: agents to invoke, parallelism mode, dependencies,
+# and an execution wave via `runs_in`.
+# Validated by config/pipeline-dag.schema.json (CI gate).
+#
+# EXECUTION MODEL
+# ----------------
+# The orchestrator reads `pipeline.execution_mode` from config/sources.yaml.
+#
+# `per-file-loop` (default):
+#   1. Loop over every source file from config/sources.yaml.
+#      Each iteration runs ALL phases marked `runs_in: per-file-loop`
+#      end-to-end for that file (A → B(per-file) → C → D → E).
+#      Up to `pipeline.per_file_parallelism` file iterations may run
+#      concurrently as independent threads (default 1 = strict sequential).
+#   2. After the loop joins, run every phase marked `runs_in: workspace`
+#      sequentially in DAG order (B-workspace xref pass → F → G → H → I
+#      → L → M → O → N). These phases consume the per-file outputs as a
+#      complete set.
+#
+# `per-phase` (legacy):
+#   Run every phase across all files in DAG order regardless of
+#   `runs_in` (A over all files, then B over all files, …). Kept for
+#   reproducibility against earlier runs.
+#
+# IMPORTANT: when a `runs_in: per-file-loop` phase contains an agent
+# step whose `scope` is `workspace` (e.g. the B `facts-extractor`
+# workspace incoming-xref pass), that workspace agent is DEFERRED and
+# executed once after the per-file loop joins, even though it lives
+# inside a per-file-loop phase. Per-file scope agents inside the same
+# phase still run in the per-file loop.
+
+schema_version: "1.0"
+
+# `source_platform` is resolved during phase A and propagated through every
+# manifest, facts graph, bundle, agent, and generated document. `ibmi` covers
+# IBM i / AS400 ILE COBOL, including CBLLE and SQLCBLLE source members.
+supported_platforms:
+  - "mainframe"
+  - "ibmi"
+
+# Document template configuration for phases F, G, L, M
+# Specifies which profile templates to use for requirements, functional analysis,
+# and technical analysis across all phases. Auto-detection can still override
+# per-file if a file type matches a specific profile (e.g., CICS→applicazione).
+templates:
+  requirements:
+    # Options: default | ate-org-applicazione | ate-org-interfaccia
+    default: "default"
+    # Per-file auto-detection (scripts/lib/req_profile_resolver.py) can override
+    # the default with ate-org-applicazione or ate-org-interfaccia.
+    profile_path: "config/templates/docs/requirements"
+  
+  functional_analysis:
+    # Options: default | afu-org-applicazione | afu-org-interfaccia
+    default: "default"
+    # Per-file auto-detection (scripts/lib/fa_profile_resolver.py) can override
+    # the default with afu-org-applicazione or afu-org-interfaccia.
+    profile_path: "config/templates/docs/functional-analysis"
+  
+  technical_analysis:
+    # Options: default (ate-org-applicazione / ate-org-interfaccia are
+    # auto-detected by scripts/lib/ta_profile_resolver.py but currently fall
+    # back to default until those template dirs are added).
+    default: "default"
+    profile_path: "config/templates/docs/technical-analysis"
+
+# Hard cap on concurrent subagent dispatch per phase. Individual phases
+# may override via their own `max_parallel`. This is the in-phase fan-out
+# cap (e.g. per-section subagents within a single file). The orthogonal
+# per-file thread count is controlled by `pipeline.per_file_parallelism`
+# in config/sources.yaml.
+max_parallel: 1
+
+phases:
+  - id: A
+    name: "Chunking"
+    parallelism: "per-file"
+    runs_in: "per-file-loop"
+    max_parallel: 15
+    depends_on: []
+    # NOTE: chunk-manifest.json is produced deterministically and validated
+    # via JSON Schema (skills/cobol-chunking/schemas/). No LLM qa-reviewer
+    # pass — schema validation is the gate.
+    agents:
+      - name: cobol-chunker
+        inputs: ["<file>", "config/sources.yaml::<platform|platforms>"]
+        outputs: ["docs/_shared/<file>/chunk-manifest.json"]
+        scripts:
+          - "skills/cobol-chunking/scripts/chunk.py"
+
+  - id: B
+    name: "Facts extraction (per-file + workspace incoming-xref pass)"
+    parallelism: "per-file"
+    runs_in: "per-file-loop"
+    max_parallel: 15
+    # The per-file `facts-extractor` runs inside the per-file loop. The
+    # workspace-scope `facts-extractor` step (incoming-xref pass) is
+    # DEFERRED and executed once after every file has cleared this phase
+    # — see the EXECUTION MODEL block at the top of this file.
+    depends_on: ["A"]
+    agents:
+      - name: facts-extractor
+        scope: "per-file"
+        inputs:
+          - "docs/_shared/<file>/chunk-manifest.json"
+          - "docs/_shared/<file>/chunk-manifest.json::source_platform"
+        outputs: ["docs/_shared/<file>/facts.json"]
+        scripts:
+          - "skills/cobol-facts-extraction/scripts/extract-facts.py"
+      - name: chunk-text-extractor
+        scope: "per-file"
+        # Sibling of facts-extractor: slices each chunk's raw source
+        # lines into docs/_shared/<file>/chunks/<chunk_id>.txt + index.json.
+        # No LLM, deterministic, sha-gated against the phase-A manifest.
+        inputs:
+          - "docs/_shared/<file>/chunk-manifest.json"
+          - "<file>"
+        outputs:
+          - "docs/_shared/<file>/chunks/index.json"
+          - "docs/_shared/<file>/chunks/<chunk_id>.txt"
+        scripts:
+          - "skills/chunk-text-extraction/scripts/extract-chunks.py"
+      - name: facts-extractor
+        scope: "workspace"
+        inputs: ["docs/_shared/**/facts.json"]
+        outputs: ["docs/_shared/**/facts.json"]
+        scripts:
+          - "skills/cobol-facts-extraction/scripts/xref-incoming-pass.py"
+
+  - id: C
+    name: "Section docs + per-section .mmd diagrams + file-level overview .mmd"
+    parallelism: "per-section"
+    runs_in: "per-file-loop"
+    max_parallel: 15
+    # PER-SECTION FAN-OUT (pipeline-dag v3):
+    #
+    #   1. `section-doc-writer` (per-section, LLM): for each chunk in the
+    #      chunk manifest, CO-AUTHORS EN + every language in the orchestrator
+    #      `-Languages` set (config default: en) in a single LLM call,
+    #      writing `docs/en/<file>/sections/<chunk-id>.md` AND
+    #      `docs/<target_language>/<file>/sections/<chunk-id>.md` per
+    #      configured language, plus the per-section `.mmd` source(s) at
+    #      `docs/_shared/<file>/diagrams/section-<chunk-id>[-<suffix>].mmd`.
+    #      Diagram kind is selected by the heuristic in the agent file
+    #      (default `flowchart TD`; `sequenceDiagram` for CICS;
+    #      `stateDiagram-v2` for cursor lifecycles; `erDiagram` for
+    #      record-centric data chunks). NO `.svg` is produced here — only
+    #      `.mmd` sources are authored.
+    #
+    #   2. `qa-reviewer` (per-section, LLM): reviews the section MD against
+    #      the `section-doc` checklist, once per co-authored language.
+    #
+    #   3. `section-doc-writer` (per-file finalizer, LLM): co-authors
+    #      `index.md` + `complete.md` per language from the per-chunk
+    #      section files.
+    #
+    #   4. `diagram-renderer` (per-file, LLM): authors FILE-LEVEL overview
+    #      `.mmd` sources only (call-graph, control-flow, jcl-steps,
+    #      cics-calls, cursor-lifecycle, er-fragment). Per-section
+    #      authoring is FORBIDDEN here — it lives in step 1.
+    #
+    #   5. `qa-reviewer` (per-file, LLM): reviews the section set per
+    #      co-authored language.
+    #
+    # EN is the SOURCE-OF-TRUTH language; non-EN trees are CO-AUTHORED in
+    # the same LLM call as EN. A translator fallback pass may run later only
+    # to reconcile missing or drifted siblings.
+    #
+    # RUNTIME ORCHESTRATION: the per-section `section-doc-writer` + `qa-reviewer`
+    # steps below are the DAG contract. At runtime they are driven by the
+    # `section-agent` orchestrator (the default -Agent of
+    # scripts/dispatchers/run-docs-copilot-batch.ps1), which loops its `section-writer`
+    # (reuses the `section-doc-writer` skill) and `section-reviewer` (reuses the
+    # `qa-reviewer` skill) sub-agents per chunk until the reviewer approves or
+    # the iteration budget is spent.
+    depends_on: ["B"]
+    # TOKEN OPTIMISATION: every per-section subagent reads ONLY a single
+    # prepared bundle JSON at
+    #   `docs/_shared/<file>/_bundles/<chunk_id>.bundle.json`
+    # which already embeds the chunk record, chunk text, the chunk-scoped
+    # slice of `facts.json` (~10% of the full file), the kind-matching
+    # template, the active profile thresholds, and the authoritative
+    # output paths. Bundles are produced deterministically by
+    # `skills/section-doc-writer/scripts/stage-bundles.py` (which shells
+    # out to `assemble-inputs.py` per chunk) either upfront by the
+    # orchestrator OR on demand. Loading `facts.json`, `facts-slices`,
+    # `chunks`, `chunk-manifest.json`, or `chunks/index.json` at runtime
+    # from a per-section subagent is FORBIDDEN — see
+    # `.github/agents/section-doc-writer.agent.md` step 1 and
+    # `.github/skills/section-doc-writer/SKILL.md` (Determinism Rules).
+    #
+    # BILINGUAL CO-AUTHORING: each subagent emits EN + every language
+    # in the orchestrator `-Languages` set (config default: en) in the same
+    # LLM response. The orchestrator binds that language list to every
+    # `section-doc-writer` invocation in this phase. A translator fallback
+    # pass may run later only to reconcile missing / drifted siblings.
+    agents:
+      - name: section-doc-writer
+        scope: "per-section"
+        inputs:
+          - "docs/_shared/<file>/_bundles/<chunk_id>.bundle.json"
+          - "<target_languages>"   # bound from the orchestrator -Languages set (default: en)
+        outputs:
+          # Authoritative paths come from `bundle.output_paths`; the
+          # entries below are the canonical shape.
+          - "docs/en/<file>/sections/<chunk_id>.md"
+          - "docs/<target_language>/<file>/sections/<chunk_id>.md"   # one per target language
+          - "docs/_shared/<file>/diagrams/section-<chunk_id>.mmd"
+        scripts:
+          # Bundle producer (deterministic; runs before this agent).
+          - "skills/section-doc-writer/scripts/stage-bundles.py"
+          - "skills/section-doc-writer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-section"
+        inputs:
+          - artifact_path: "docs/_shared/<file>/_bundles/<chunk_id>.bundle.json"
+            kind: "bundle"
+          - artifact_path: "docs/en/<file>/sections/<chunk_id>.md"
+            kind: "section-doc"
+            language: "en"
+          - artifact_path: "docs/_shared/<file>/diagrams/section-<chunk_id>.mmd"
+            kind: "diagrams"
+        outputs: ["docs/_reviews/section-doc/<file>__<chunk_id>__en.json"]
+        scripts:
+          - "skills/qa-reviewer/scripts/check-section-doc.py"
+      - name: section-doc-finalizer
+        scope: "per-file"
+        # File-level finalizer: assembles index.md + complete.md from the
+        # per-section MD set produced by the per-section section-doc-writer
+        # above. The deterministic prep half lives in the section-doc-finalizer
+        # skill; the LLM author is the dedicated `section-doc-finalizer` agent
+        # (`.github/agents/section-doc-finalizer.agent.md`). Wired into the
+        # orchestrator as Step E (`scripts/dispatchers/run-docs-finalize-batch.ps1`).
+        #
+        # TRK catalog (DAG step): `assemble-complete.py` appends a deterministic
+        # "Record types (TRK)" catalog to complete.md, derived from
+        # facts.json data_records named `REC-<code>-<file>` whose suffix is a
+        # declared output file. This is the single point at which the SISBA
+        # tracciato catalog enters the pipeline so the phase-L technical-analysis
+        # writer (which reads complete.md only) can author its `trk-gestiti`
+        # section without re-reading functional-analysis.md.
+        inputs:
+          - "docs/_shared/<file>/chunk-manifest.json"
+          - "docs/_shared/<file>/facts.json"
+          - "docs/en/<file>/sections/**/*.md"
+          - "docs/<target_language>/<file>/sections/**/*.md"   # one per target language
+          - "<target_languages>"   # bound from the orchestrator -Languages set (default: en)
+        outputs:
+          - "docs/en/<file>/index.md"
+          - "docs/en/<file>/complete.md"   # includes the deterministic TRK catalog
+          - "docs/<target_language>/<file>/index.md"   # one per target language
+          - "docs/<target_language>/<file>/complete.md"   # one per target language
+        scripts:
+          - "skills/section-doc-finalizer/scripts/assemble-inputs.py"
+          - "skills/section-doc-finalizer/scripts/assemble-complete.py"
+      - name: diagram-renderer
+        scope: "per-file"
+        # FILE-LEVEL OVERVIEW DIAGRAMS ONLY. Authors `.mmd` sources for
+        # call-graph / inter-program-call-graph / control-flow / jcl-steps /
+        # cl-command-flow / cics-calls / cursor-lifecycle / er-fragment, one
+        # per non-empty source collection in `facts.json`. Per-section `.mmd`
+        # files are owned by `section-doc-writer` above. No `.svg` rendering here.
+        inputs:
+          - "docs/_shared/<file>/facts.json"
+        outputs:
+          - "docs/_shared/<file>/diagrams/call-graph.mmd"
+          - "docs/_shared/<file>/diagrams/inter-program-call-graph.mmd"
+          - "docs/_shared/<file>/diagrams/control-flow.mmd"
+          - "docs/_shared/<file>/diagrams/jcl-steps.mmd"
+          - "docs/_shared/<file>/diagrams/cl-command-flow.mmd"
+          - "docs/_shared/<file>/diagrams/cics-calls.mmd"
+          - "docs/_shared/<file>/diagrams/cursor-lifecycle.mmd"
+          - "docs/_shared/<file>/diagrams/er-fragment.mmd"
+        scripts:
+          - "skills/diagram-renderer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-file"
+        # Iterates over the orchestrator -Languages set (default: ["en"]).
+        # The orchestrator expands this template once per language.
+        inputs:
+          - artifact_path: "docs/<language>/<file>/sections"
+            kind: "section-doc"
+            language: "<language>"
+          - artifact_path: "docs/_shared/<file>/diagrams"
+            kind: "diagrams"
+        outputs:
+          - "docs/_reviews/section-doc/<file>__<language>.json"
+          - "docs/_reviews/diagrams/<file>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/review-section-set.py"
+
+  - id: F
+    name: "Technical requirements docs (per-section + per-file finalizer)"
+    parallelism: "per-section"
+    runs_in: "per-file-loop"
+    max_parallel: 15
+    # PER-REQUIREMENTS-SECTION FAN-OUT (mirrors phase G):
+    #
+    # Template profile selection: controlled by top-level `templates.requirements.default`
+    # in this file (see top of pipeline-dag.yaml). Per-file auto-detection via
+    # `scripts/lib/req_profile_resolver.py` can override (CPY/BMS → skip, JCL/PRC → interfaccia,
+    # CBL+CICS/BMS → applicazione, plain batch CBL → interfaccia, else → configured default).
+    # Template family: `config/templates/docs/requirements/{default, ate-org-applicazione, ate-org-interfaccia}`.
+    #
+    # Copybooks and BMS mapsets are skipped: a tombstone is written under
+    # `docs/_shared/<file>/_req-bundles/_skipped.json` and no further requirements
+    # work runs.
+    #
+    #   1. `requirements-writer` (per-section, LLM): for each section declared in
+    #      the chosen profile's `profile.yaml`, CO-AUTHORS EN + every language in
+    #      the orchestrator `-Languages` set (config default: en) in a single LLM
+    #      call, writing the per-language draft at
+    #      `docs/_shared/<file>/_req-sections/<lang>/<section_id>.md`.
+    #
+    #   2. `qa-reviewer` (per-section, LLM): reviews each draft against
+    #      `kind: "requirements"` checks (required sections present,
+    #      optional_marker for skipped, table columns match profile,
+    #      embed_diagrams present, citations + Sources block, no forbidden
+    #      tokens) and emits
+    #      `docs/_reviews/requirements/<file>__<section_id>__<lang>.json`.
+    #
+    #   3. `requirements-writer` (per-file finalizer, LLM): stitches the per-section
+    #      drafts in profile order into a single
+    #      `docs/<lang>/<file>/requirements.md` per language. Fills front-matter
+    #      (classification table, acronym, SSA, template version) from
+    #      `profile.front_matter` + `facts.json`. Optional sections that were not
+    #      produced are stamped with `profile.optional_marker`.
+    #
+    #   4. `qa-reviewer` (per-file, LLM): final pass on each emitted
+    #      `requirements.md` → `docs/_reviews/requirements/<file>__<lang>.json`.
+    #
+    # TOKEN OPTIMISATION (same contract as phases C and G): per-section subagents
+    # read ONLY a single prepared bundle at
+    #   `docs/_shared/<file>/_req-bundles/<section_id>.bundle.json`
+    # (with a deterministic `.bundle.md` sibling for LLM consumption). The bundle
+    # embeds the profile section spec, the relevant facts slice, a deterministic
+    # excerpt of the EN `complete.md` matched by section number/heading, the
+    # `.mmd` source(s) for any `embed_diagrams`, the matching snippet of
+    # `template.md`/`template.<lang>.md`, profile thresholds, and the
+    # authoritative output paths. Loading `facts.json`, `complete.md`, the full
+    # `template.md`, or `profile.yaml` directly at runtime from a per-section
+    # subagent is FORBIDDEN — see `.github/agents/requirements-writer.agent.md`
+    # and `.github/skills/requirements-writer/SKILL.md` (Determinism Rules).
+    depends_on: ["C"]
+    agents:
+      - name: requirements-writer
+        scope: "per-section"
+        inputs:
+          - "docs/_shared/<file>/_req-bundles/<section_id>.bundle.json"
+          - "<target_languages>"
+        outputs:
+          - "docs/_shared/<file>/_req-sections/en/<section_id>.md"
+          - "docs/_shared/<file>/_req-sections/<target_language>/<section_id>.md"
+        scripts:
+          - "skills/requirements-writer/scripts/stage-bundles.py"
+          - "skills/requirements-writer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-section"
+        inputs:
+          - artifact_path: "docs/_shared/<file>/_req-bundles/<section_id>.bundle.json"
+            kind: "bundle"
+          - artifact_path: "docs/_shared/<file>/_req-sections/en/<section_id>.md"
+            kind: "requirements"
+            language: "en"
+        outputs:
+          - "docs/_reviews/requirements/<file>__<section_id>__en.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-requirements.py"
+      - name: requirements-writer
+        scope: "per-file"
+        inputs:
+          - "docs/_shared/<file>/_req-bundles/_finalize.bundle.json"
+          - "docs/_shared/<file>/_req-sections/**/*.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/en/<file>/requirements.md"
+          - "docs/<target_language>/<file>/requirements.md"
+        scripts:
+          - "skills/requirements-finalizer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-file"
+        inputs:
+          - artifact_path: "docs/<language>/<file>/requirements.md"
+            kind: "requirements"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/requirements/<file>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-requirements.py"
+
+  - id: G
+    name: "Functional-analysis docs (per-FA-section + per-file finalizer)"
+    parallelism: "per-section"
+    runs_in: "per-file-loop"
+    max_parallel: 15
+    # PER-FA-SECTION FAN-OUT:
+    #
+    # Template profile selection: controlled by top-level `templates.functional_analysis.default`
+    # in this file (see top of pipeline-dag.yaml). Per-file auto-detection via
+    # `scripts/lib/fa_profile_resolver.py` can override (CPY/BMS → skip, JCL/PRC → interfaccia,
+    # CBL+CICS/BMS → applicazione, plain batch CBL → interfaccia, else → configured default).
+    # Template family: `config/templates/docs/functional-analysis/{default, afu-org-applicazione, afu-org-interfaccia}`.
+    #
+    # Copybooks and BMS mapsets are skipped: a tombstone is written under
+    # `docs/_shared/<file>/_fa-bundles/_skipped.json` and no further FA work runs.
+    #
+    #   1. `functional-analysis-writer` (per-FA-section, LLM): for each section
+    #      declared in the chosen profile's `profile.yaml`, CO-AUTHORS EN + every
+    #      language in the orchestrator `-Languages` set (config default: en) in a
+    #      single LLM call, writing the per-language draft at
+    #      `docs/_shared/<file>/_fa-sections/<lang>/<section_id>.md`.
+    #
+    #   2. `qa-reviewer` (per-FA-section, LLM): reviews each draft against
+    #      `kind: "functional-analysis"` checks (required sections present,
+    #      optional_marker for skipped, table columns match profile,
+    #      embed_diagrams present, citations + Sources block, no forbidden
+    #      tokens) and emits
+    #      `docs/_reviews/functional-analysis/<file>__<section_id>__<lang>.json`.
+    #
+    #   3. `functional-analysis-writer` (per-file finalizer, LLM): stitches the
+    #      per-section drafts in profile order into a single
+    #      `docs/<lang>/<file>/functional-analysis.md` per language. Fills
+    #      front-matter (classification table, acronym, SSA, template version)
+    #      from `profile.front_matter` + `facts.json`. Optional sections that
+    #      were not produced are stamped with `profile.optional_marker`.
+    #
+    #   4. `qa-reviewer` (per-file, LLM): final pass on each emitted
+    #      `functional-analysis.md` → `docs/_reviews/functional-analysis/<file>__<lang>.json`.
+    #
+    # TOKEN OPTIMISATION (same contract as phase C): per-section subagents read
+    # ONLY a single prepared bundle at
+    #   `docs/_shared/<file>/_fa-bundles/<section_id>.bundle.json`
+    # (with a deterministic `.bundle.md` sibling for LLM consumption). The bundle
+    # embeds the profile section spec, the relevant facts slice, a deterministic
+    # excerpt of the EN `complete.md` matched by section number/heading, the
+    # `.mmd` source(s) for any `embed_diagrams`, the matching snippet of
+    # `template.md`/`template.<lang>.md`, profile thresholds, and the
+    # authoritative output paths. Loading `facts.json`, `complete.md`, the full
+    # `template.md`, or `profile.yaml` directly at runtime from a per-section
+    # subagent is FORBIDDEN — see `.github/agents/functional-analysis-writer.agent.md`
+    # and `.github/skills/functional-analysis-writer/SKILL.md` (Determinism Rules).
+    depends_on: ["F"]
+    agents:
+      - name: functional-analysis-writer
+        scope: "per-section"
+        inputs:
+          - "docs/_shared/<file>/_fa-bundles/<section_id>.bundle.json"
+          - "<target_languages>"
+        outputs:
+          - "docs/_shared/<file>/_fa-sections/en/<section_id>.md"
+          - "docs/_shared/<file>/_fa-sections/<target_language>/<section_id>.md"
+        scripts:
+          - "skills/functional-analysis-writer/scripts/stage-bundles.py"
+          - "skills/functional-analysis-writer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-section"
+        inputs:
+          - artifact_path: "docs/_shared/<file>/_fa-bundles/<section_id>.bundle.json"
+            kind: "bundle"
+          - artifact_path: "docs/_shared/<file>/_fa-sections/en/<section_id>.md"
+            kind: "functional-analysis"
+            language: "en"
+        outputs:
+          - "docs/_reviews/functional-analysis/<file>__<section_id>__en.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-functional-analysis.py"
+      - name: functional-analysis-writer
+        scope: "per-file"
+        inputs:
+          - "docs/_shared/<file>/_fa-bundles/_finalize.bundle.json"
+          - "docs/_shared/<file>/_fa-sections/**/*.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/en/<file>/functional-analysis.md"
+          - "docs/<target_language>/<file>/functional-analysis.md"
+        scripts:
+          - "skills/functional-analysis-finalizer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-file"
+        inputs:
+          - artifact_path: "docs/<language>/<file>/functional-analysis.md"
+            kind: "functional-analysis"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/functional-analysis/<file>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-functional-analysis.py"
+
+  - id: I
+    name: "Group documentation (per-group index.md + complete.md)"
+    parallelism: "per-group"
+    runs_in: "workspace"
+    max_parallel: 15
+    # PHASE I — GROUP DOCUMENTATION (scaffold).
+    #
+    # Stitches member files' phase-E outputs into a group-level landing
+    # page + single-file concatenation, one folder per group declared in
+    # config/grouping.yaml:
+    #   docs/<lang>/_groups/<group_id>/index.md
+    #   docs/<lang>/_groups/<group_id>/complete.md
+    #
+    # The deterministic prep half packages each group into a single
+    # finalize bundle at
+    #   docs/_shared/_groups/<group_id>/_doc-bundles/_finalize.bundle.{json,md}
+    # aggregating each member's chunk-manifest.json + facts.json TOC
+    # fields + incoming_xref[] + complete.md excerpts. The LLM author is
+    # the dedicated `group-doc-finalizer` agent.
+    #
+    # If config/grouping.yaml has no groups, the phase is a no-op (exit 0).
+    depends_on: ["C"]
+    agents:
+      - name: group-doc-finalizer
+        scope: "per-group"
+        inputs:
+          - "config/grouping.yaml"
+          - "docs/_shared/<member>/chunk-manifest.json"
+          - "docs/_shared/<member>/facts.json"
+          - "docs/en/<member>/index.md"
+          - "docs/en/<member>/complete.md"
+          - "docs/<target_language>/<member>/index.md"
+          - "docs/<target_language>/<member>/complete.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/_shared/_groups/<group_id>/_doc-bundles/_finalize.bundle.json"
+          - "docs/_shared/_groups/<group_id>/_doc-bundles/_finalize.bundle.md"
+          - "docs/en/_groups/<group_id>/index.md"
+          - "docs/en/_groups/<group_id>/complete.md"
+          - "docs/<target_language>/_groups/<group_id>/index.md"
+          - "docs/<target_language>/_groups/<group_id>/complete.md"
+        scripts:
+          - "skills/group-doc-finalizer/scripts/assemble-inputs.py"
+          - "skills/group-doc-finalizer/scripts/group_doc_stage_batch.ps1"
+      - name: qa-reviewer
+        scope: "per-group"
+        inputs:
+          - artifact_path: "docs/<language>/_groups/<group_id>/index.md"
+            kind: "group-doc"
+            language: "<language>"
+          - artifact_path: "docs/<language>/_groups/<group_id>/complete.md"
+            kind: "group-doc"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/group-doc/<group_id>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-group-doc.py"
+
+  - id: J
+    name: "Group technical-requirements docs (per-section + per-group finalizer)"
+    parallelism: "per-group"
+    runs_in: "workspace"
+    max_parallel: 15
+    # PHASE J — GROUP ATE (scaffold).
+    #
+    # Mirrors phase F at group scope. Template profile family:
+    # `config/templates/docs/requirements/{default, ate-org-applicazione, ate-org-interfaccia}`.
+    # Auto-detection rule per group: any CICS/BMS member → `ate-org-applicazione`;
+    # else any JCL/PRC member with batch CBL → `ate-org-interfaccia`;
+    # else use `templates.requirements.default` from top-level config.
+    #
+    # Bundle convention:
+    #   docs/_shared/_groups/<group_id>/_req-group-bundles/<section_id>.bundle.{json,md}
+    #   docs/_shared/_groups/<group_id>/_req-group-bundles/_finalize.bundle.{json,md}
+    # Per-section drafts:
+    #   docs/_shared/_groups/<group_id>/_req-group-sections/<lang>/<section_id>.md
+    # Final per-language deliverable:
+    #   docs/<lang>/_groups/<group_id>/requirements.md
+    #
+    # Depends on F (per-file ATE for each member must exist) and I (group
+    # `complete.md` is the deterministic text source the per-section
+    # bundles excerpt from).
+    depends_on: ["F", "I"]
+    agents:
+      - name: requirements-group-writer
+        scope: "per-section"
+        inputs:
+          - "docs/_shared/_groups/<group_id>/_req-group-bundles/<section_id>.bundle.json"
+          - "<target_languages>"
+        outputs:
+          - "docs/_shared/_groups/<group_id>/_req-group-sections/en/<section_id>.md"
+          - "docs/_shared/_groups/<group_id>/_req-group-sections/<target_language>/<section_id>.md"
+        scripts:
+          - "skills/requirements-group-writer/scripts/stage-bundles.py"
+          - "skills/requirements-group-writer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-section"
+        inputs:
+          - artifact_path: "docs/_shared/_groups/<group_id>/_req-group-bundles/<section_id>.bundle.json"
+            kind: "bundle"
+          - artifact_path: "docs/_shared/_groups/<group_id>/_req-group-sections/en/<section_id>.md"
+            kind: "group-requirements"
+            language: "en"
+        outputs:
+          - "docs/_reviews/group-requirements/<group_id>__<section_id>__en.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-group-requirements.py"
+      - name: requirements-group-writer
+        scope: "per-group"
+        inputs:
+          - "docs/_shared/_groups/<group_id>/_req-group-bundles/_finalize.bundle.json"
+          - "docs/_shared/_groups/<group_id>/_req-group-sections/**/*.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/en/_groups/<group_id>/requirements.md"
+          - "docs/<target_language>/_groups/<group_id>/requirements.md"
+        scripts:
+          - "skills/requirements-group-finalizer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-group"
+        inputs:
+          - artifact_path: "docs/<language>/_groups/<group_id>/requirements.md"
+            kind: "group-requirements"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/group-requirements/<group_id>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-group-requirements.py"
+
+  - id: K
+    name: "Group functional-analysis docs (per-section + per-group finalizer)"
+    parallelism: "per-group"
+    runs_in: "workspace"
+    max_parallel: 15
+    # PHASE K — GROUP AFU (scaffold).
+    #
+    # Mirrors phase G at group scope. Template profile family: 
+    # `config/templates/docs/functional-analysis/{default, default
+    # Same auto-detect rule as phase J: any CICS/BMS member → `applicazione`;
+    # else any JCL/PRC member → `interfaccia`; else use `templates.functional_analysis.default` from top-level config.
+    #
+    # Depends on G (per-file AFU for each member must exist) and J (so AFU
+    # sections can cite group ATE requirement ids).
+    depends_on: ["G", "J"]
+    agents:
+      - name: functional-analysis-group-writer
+        scope: "per-section"
+        inputs:
+          - "docs/_shared/_groups/<group_id>/_fa-group-bundles/<section_id>.bundle.json"
+          - "<target_languages>"
+        outputs:
+          - "docs/_shared/_groups/<group_id>/_fa-group-sections/en/<section_id>.md"
+          - "docs/_shared/_groups/<group_id>/_fa-group-sections/<target_language>/<section_id>.md"
+        scripts:
+          - "skills/functional-analysis-group-writer/scripts/stage-bundles.py"
+          - "skills/functional-analysis-group-writer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-section"
+        inputs:
+          - artifact_path: "docs/_shared/_groups/<group_id>/_fa-group-bundles/<section_id>.bundle.json"
+            kind: "bundle"
+          - artifact_path: "docs/_shared/_groups/<group_id>/_fa-group-sections/en/<section_id>.md"
+            kind: "group-functional-analysis"
+            language: "en"
+        outputs:
+          - "docs/_reviews/group-functional-analysis/<group_id>__<section_id>__en.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-group-functional-analysis.py"
+      - name: functional-analysis-group-writer
+        scope: "per-group"
+        inputs:
+          - "docs/_shared/_groups/<group_id>/_fa-group-bundles/_finalize.bundle.json"
+          - "docs/_shared/_groups/<group_id>/_fa-group-sections/**/*.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/en/_groups/<group_id>/functional-analysis.md"
+          - "docs/<target_language>/_groups/<group_id>/functional-analysis.md"
+        scripts:
+          - "skills/functional-analysis-group-finalizer/scripts/assemble-inputs.py"
+      - name: qa-reviewer
+        scope: "per-group"
+        inputs:
+          - artifact_path: "docs/<language>/_groups/<group_id>/functional-analysis.md"
+            kind: "group-functional-analysis"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/group-functional-analysis/<group_id>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-group-functional-analysis.py"
+
+  - id: L
+    name: "Technical-analysis docs (per-file ATE single-pass finalizer + DOCX)"
+    parallelism: "per-file"
+    runs_in: "per-file-loop"
+    max_parallel: 15
+    # PHASE L — PER-FILE TECHNICAL ANALYSIS (ATE — Analisi Tecnica).
+    #
+    # SINGLE-PASS finalizer: unlike phases F/G there are no per-section
+    # drafts. The consolidated narrative source is the already-authored
+    # `docs/en/<file>/complete.md` (phase-E output), which the
+    # `technical-analysis-writer` agent reorganizes and rewrites into the
+    # resolved technical-analysis profile/template structure.
+    #
+    # Template profile selection: controlled by top-level `templates.technical_analysis.default`
+    # in this file (see top of pipeline-dag.yaml). Per-file auto-detection via
+    # `scripts/lib/ta_profile_resolver.py` can override (CPY/BMS → skip, JCL/PRC → interfaccia,
+    # CBL+CICS/BMS → applicazione, plain batch CBL → interfaccia, else → configured default).
+    # Template family: `config/templates/docs/technical-analysis/{default, ate-org-applicazione, ate-org-interfaccia}`.
+    #
+    # Copybooks and BMS mapsets are skipped: a tombstone is written under
+    # `docs/_shared/<file>/_ta-bundles/_skipped.json`.
+    #
+    # Steps:
+    #   1. stage (deterministic): `assemble-inputs.py` builds
+    #      `docs/_shared/<file>/_ta-bundles/_finalize.bundle.{json,md}`
+    #      embedding complete.md + profile/template + front_matter_values.
+    #   2. dispatch (LLM): `technical-analysis-writer` (per-file) co-authors
+    #      EN + every target language at
+    #      `docs/<lang>/<file>/technical-analysis.md` in one call.
+    #   3. docx (deterministic): `Convert-MdToDocx.ps1` renders a sibling
+    #      `docs/<lang>/<file>/technical-analysis.docx` via pandoc (plain
+    #      default styling). Skipped with a warning if pandoc is absent.
+    #
+    # TOKEN OPTIMISATION: the dispatch subagent reads ONLY the prepared
+    # bundle MD. Loading `facts.json`, `complete.md`, the full
+    # `template.md`, or `profile.yaml` directly at runtime is FORBIDDEN —
+    # see `.github/agents/technical-analysis-writer.agent.md`.
+    depends_on: ["G"]
+    agents:
+      - name: technical-analysis-writer
+        scope: "per-file"
+        inputs:
+          - "docs/_shared/<file>/_ta-bundles/_finalize.bundle.json"
+          - "docs/en/<file>/complete.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/en/<file>/technical-analysis.md"
+          - "docs/<target_language>/<file>/technical-analysis.md"
+          - "docs/en/<file>/technical-analysis.docx"
+          - "docs/<target_language>/<file>/technical-analysis.docx"
+        scripts:
+          - "skills/technical-analysis-writer/scripts/assemble-inputs.py"
+          - "skills/technical-analysis-writer/scripts/ta_stage_batch.ps1"
+      - name: qa-reviewer
+        scope: "per-file"
+        inputs:
+          - artifact_path: "docs/<language>/<file>/technical-analysis.md"
+            kind: "technical-analysis"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/technical-analysis/<file>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-requirements.py"
+
+  - id: M
+    name: "Group technical-analysis docs (per-group ATE single-pass finalizer + DOCX)"
+    parallelism: "per-group"
+    runs_in: "workspace"
+    max_parallel: 15
+    # PHASE M — PER-GROUP TECHNICAL ANALYSIS (ATE — Analisi Tecnica).
+    #
+    # Mirrors phase L at group scope. SINGLE-PASS finalizer: the
+    # consolidated narrative source is the per-group
+    # `docs/en/_groups/<group_id>/complete.md` (phase-I output), which the
+    # `technical-analysis-writer` agent (per-group scope) reorganizes into
+    # the resolved group technical-analysis structure. Member order matches
+    # config/grouping.yaml verbatim.
+    #
+    # Template profile family: `config/templates/docs/technical-analysis/{default, ate-org-applicazione, ate-org-interfaccia}`.
+    # Auto-detection per group: any BMS member → applicazione; any JCL/PRC member → interfaccia; 
+    # else use `templates.technical_analysis.default` from top-level config.
+    #
+    # Steps: stage (`assemble-group-inputs.py`) → dispatch
+    # (`technical-analysis-writer` per-group) → docx
+    # (`Convert-MdToDocx.ps1`, pandoc plain styling).
+    #
+    # Depends on I (group `complete.md` is the narrative source) and L
+    # (per-file ATE for each member exists). An empty grouping.yaml is a
+    # no-op (exit 0).
+    depends_on: ["I", "L"]
+    agents:
+      - name: technical-analysis-writer
+        scope: "per-group"
+        inputs:
+          - "config/grouping.yaml"
+          - "docs/_shared/_groups/<group_id>/_ta-group-bundles/_finalize.bundle.json"
+          - "docs/en/_groups/<group_id>/complete.md"
+          - "<target_languages>"
+        outputs:
+          - "docs/_shared/_groups/<group_id>/_ta-group-bundles/_finalize.bundle.json"
+          - "docs/_shared/_groups/<group_id>/_ta-group-bundles/_finalize.bundle.md"
+          - "docs/en/_groups/<group_id>/technical-analysis.md"
+          - "docs/<target_language>/_groups/<group_id>/technical-analysis.md"
+          - "docs/en/_groups/<group_id>/technical-analysis.docx"
+          - "docs/<target_language>/_groups/<group_id>/technical-analysis.docx"
+        scripts:
+          - "skills/technical-analysis-writer/scripts/assemble-group-inputs.py"
+          - "skills/technical-analysis-writer/scripts/ta_group_stage_batch.ps1"
+      - name: qa-reviewer
+        scope: "per-group"
+        inputs:
+          - artifact_path: "docs/<language>/_groups/<group_id>/technical-analysis.md"
+            kind: "group-technical-analysis"
+            language: "<language>"
+        outputs:
+          - "docs/_reviews/technical-analysis/<group_id>__<language>.json"
+        scripts:
+          - "skills/qa-reviewer/scripts/check-group-requirements.py"
+
+  - id: N
+    name: "Documentation portal"
+    parallelism: "fan-in"
+    runs_in: "workspace"
+    max_parallel: 1
+    # Runs after every content phase so the portal includes EN (source of
+    # truth) plus any co-authored translation trees under `docs/`.
+    # The `docs/*/**/*.md` glob picks up any language directory emitted
+    # under `docs/` (en, it, fr, …); the doc-portal-builder filters out
+    # underscore-prefixed internal folders (`_shared`, `_reviews`,
+    # `_modernization`, `_portal`, `_groups`).
+    depends_on: ["M", "L", "K", "J", "I", "G", "F"]
+    agents:
+      - name: doc-portal-builder
+        scope: "workspace"
+        inputs:
+          - "docs/en/**/*.md"
+          - "docs/*/**/*.md"
+          - "docs/_glossary.md"
+          - "docs/_shared/risk-rollup.md"
+        outputs:
+          - "docs/_portal/mkdocs.yml"
+          - "docs/_portal/README.md"
+          - "docs/_portal/site/**"
+      - name: qa-reviewer
+        scope: "workspace"
+        inputs:
+          - artifact_path: "docs/_portal"
+            kind: "portal"
+        outputs: ["docs/_reviews/portal/portal.json"]
+    scripts:
+      - "scripts/portal/build-portal-static.py"

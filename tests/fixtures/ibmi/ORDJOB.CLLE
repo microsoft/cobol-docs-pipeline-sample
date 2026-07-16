@@ -1,0 +1,9 @@
+             PGM        PARM(&ORDERID)
+             DCL        VAR(&ORDERID) TYPE(*CHAR) LEN(10)
+             OVRDBF     FILE(ORDERS) TOFILE(DEMODATA/ORDERS)
+             CALL       PGM(DEMOLIB/ORDENTRY) PARM(&ORDERID)
+             MONMSG     MSGID(CPF0000) EXEC(DO)
+             SNDPGMMSG  MSG('Order processing failed') MSGTYPE(*ESCAPE)
+             ENDDO
+             DLTOVR     FILE(ORDERS)
+             ENDPGM
