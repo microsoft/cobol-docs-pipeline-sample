@@ -7,9 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > [!WARNING]
-> **Proof of concept only. Do not use this project in production.**
-> The pipeline, generated documentation, and LLM-authored outputs require independent technical,
-> security, legal, privacy, and regulatory review before they are used with real workloads or data.
+> **Sample proof of concept only.**
+> This project is a sample PoC for generating COBOL documentation files and is not intended for
+> production use.
 
 An automated **reverse-engineering and documentation factory** for mainframe and IBM i sources
 (COBOL, ILE COBOL, CL, JCL, PROC, copybook, BMS). It turns legacy source code into a complete,
