@@ -11,7 +11,7 @@ Auto-detection rules (in evaluation order):
   4. `.cbl` / `.cob`                                  -> ate-org-interfaccia
   5. anything else                                    -> default
 
-The workspace-level `technical_analysis_profile` in `config/sources.yaml`
+The workspace-level `technical_analysis_profile` in `config/pipeline.yaml`
 is used as a fallback when auto-detection yields `default` and the user
 configured something more specific.
 
@@ -28,7 +28,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TA_ROOT = REPO_ROOT / "config" / "templates" / "docs" / "technical-analysis"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 # Sentinel value returned when the file should not get an ATE document at all.
 SKIP = "__skip__"

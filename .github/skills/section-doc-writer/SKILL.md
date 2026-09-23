@@ -35,13 +35,19 @@ Do **not** use this skill for:
 
 ## Output Contract
 
-For chunk `<chunk_id>` of file `<basename-with-ext>`, for each language `<lang>` in `--languages`:
+For chunk `<chunk_id>` of file `<basename-with-ext>`, for exactly each language
+`<lang>` in `bundle.languages`, preserving its declared order:
 
 ```
 docs/<lang>/<basename-with-ext>/sections/<chunk_id_sanitized>.md
 ```
 
 The authoritative output paths for the markdown(s) and Mermaid diagram come from `bundle.output_paths` — write to those exact paths. Do not re-derive filenames from the chunk id or from any `chunks/index.json`.
+
+Never require or create an unrequested English edition or intermediate.
+English defaults only when no language is provided. Shared language-neutral
+diagrams remain shared, regardless of the requested documentation languages.
+English template headings do not add an English output; apply existing localization rules.
 
 The markdown MUST:
 
@@ -59,9 +65,9 @@ The markdown MUST:
 - Cite source ranges via Pandoc footnote form `[^src-N]` defined in a trailing `## Sources` block. Inline `[FILE:Lx-Ly]` tags are **forbidden** (see `citations-and-confidence.instructions.md`).
 - Identifier styling: COBOL/JCL identifiers (program names, paragraphs, DD names, copybooks) MUST match the regex in the active `profile.yaml::identifier_lock_regex` (default `[A-Z][A-Z0-9-]*(\.[A-Z0-9-]+)?`) and be wrapped in backticks.
 - **Per-section overview diagram.** The same authoring pass produces `docs/_shared/<basename-with-ext>/diagrams/section-<chunk_id_sanitized>.mmd` using the diagram-kind heuristic from `pipeline-dag.yaml` phase C (default `flowchart TD`; `sequenceDiagram` for CICS; `stateDiagram-v2` for cursor lifecycles; `erDiagram` for record-centric data chunks; **`flowchart LR` for copybook chunks** — the sidecar carries the inclusion graph, NOT the structure / ER fragment which is owned by `diagram-renderer` at `docs/_shared/<copybook>/diagrams/er-fragment.mmd` and embedded verbatim by the copybook markdown; see `config/templates/copybook.template.md` "DIAGRAM OWNERSHIP"). When a chunk's diagram gate fails (e.g. copybook with < 2 includers and no `REPLACING` divergence), the sidecar `.mmd` is NOT written and any stale file from a previous run is removed. No `.svg` rendering here — that is owned by phase D.
-- Be written in the requested target language for every non-EN sibling. EN is the source-of-truth; non-EN docs MUST mirror the heading structure and citation footnotes 1:1 so [`qa-reviewer`](../qa-reviewer/SKILL.md) can compare them.
+- Be written in the requested language. When multiple languages are requested, align heading structure and citation footnotes 1:1 across those editions so [`qa-reviewer`](../qa-reviewer/SKILL.md) can compare them.
 
-A companion JSON sidecar is emitted **only on EN** at `docs/_reviews/section-doc/<file>__<chunk_id>__inputs.json` capturing the exact bundle the LLM received (template hash, slice hash, chunk-text hash, language list). This sidecar is the deterministic record needed to reproduce the authoring call.
+A companion language-neutral JSON sidecar is emitted **once per chunk**, independent of the requested languages, at `docs/_reviews/section-doc/<file>__<chunk_id>__inputs.json` capturing the exact bundle the LLM received (template hash, slice hash, chunk-text hash, language list). This sidecar is the deterministic record needed to reproduce the authoring call.
 
 ## Procedure
 
@@ -77,7 +83,7 @@ A companion JSON sidecar is emitted **only on EN** at `docs/_reviews/section-doc
    - For data chunks (`data-record`, `copybook-record`, `data-division`), additionally fill `### Producers (write the record)`, `### Consumers (read the record)` and `### Shared layout` / `### Workspace data lineage` from `incoming_xref[]` (`via == "copy"` rows and `via == "jcl-step"` rows when the dataset bound to an FD is also referenced by a JCL DD) — workspace scope, not just the current source file.
    - If a subsection is genuinely empty after exhausting the bundle, write `_None._` explicitly. Never silently omit a subsection. NEVER guess a `DSN`, an FD binding or a caller that is not present in the bundle; surface the gap as a `_Warnings_` bullet instead.
 5. **Validate mechanically.** Immediately invoke [`qa-reviewer`](../qa-reviewer/SKILL.md) on the produced markdown. Fail-fast: do not move on to the next chunk while findings remain.
-6. **Report.** Print one summary line per language: `OK: wrote docs/en/<file>/sections/<chunk_id>.md  (words=…, sources=…, diagram=…)` and the qa-reviewer verdict.
+6. **Report.** Print one summary line per requested language: `OK: wrote docs/<lang>/<file>/sections/<chunk_id>.md  (words=…, sources=…, diagram=…)` and the qa-reviewer verdict.
 
 ## Bundle Schema
 
@@ -121,7 +127,7 @@ All sha256 fields are over the canonical byte form (template/source bytes UTF-8,
 - Forbidden re-derivations:
   - Never re-derive output filenames from the chunk id; always use `bundle.output_paths` verbatim.
   - Never load runtime inputs from `facts.json`, `facts-slices`, `chunks`, `chunk-manifest.json`, or `chunks/index.json` directly. Use the prepared bundle only.
-- Non-EN siblings are co-authored in the **same LLM call** as EN. Calling `translator` as a fallback is allowed; doing it upfront defeats the co-author contract.
+- Requested editions are authored in the **same LLM call**. With multiple requested languages, `translator` may repair a missing or drifted requested sibling; it must never create an unrequested English intermediate.
 
 ## Resources
 
@@ -141,4 +147,4 @@ All sha256 fields are over the canonical byte form (template/source bytes UTF-8,
 - **Missing bundle.** This skill requires a prepared bundle per chunk. Do not bypass the bundle by reading `facts.json`, `facts-slices`, or `chunks` directly in runtime authoring.
 - **Output-path drift.** If a downstream consumer derives the filename from the chunk id with its own ad-hoc regex instead of `bundle.output_paths`, it will mis-bind in the presence of phase-A renames. Always use `bundle.output_paths` verbatim.
 - **Authoring without QA.** Skipping the immediate `qa-reviewer` call lets mechanical violations (forbidden openers, missing citations, line-count mentions in prose) accumulate silently. Run it after every authoring call, not as a batch sweep.
-- **Co-authoring drift.** If EN says "lines 22–26 update the customer record" but IT says "le righe 22–28 aggiornano…", `qa-reviewer` will flag the structural diff. Co-author both languages in the same LLM call, do not translate post-hoc.
+- **Co-authoring drift.** When multiple languages are requested, factual and structural differences between their editions are flagged by `qa-reviewer`. Co-author those requested languages in the same LLM call; do not create an unrequested translation.

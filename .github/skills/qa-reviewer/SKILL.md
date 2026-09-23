@@ -40,7 +40,7 @@ Shape:
   "source_path":       "repos/sample1/COBOL/DEMO100.CBL",
   "chunk_id":          "DEMO100/procedure-division/B200-CONTROLLO-PARAMETRO/B200-EX",
   "language":          "en",
-  "profile_path":      "config/templates/docs/functional-analysis/default/profile.yaml",
+  "profile_path":      "config/templates/section-doc.profile.yaml",
   "thresholds": {
     "min_total_words":              1500,
     "min_purpose_sentences":        4,
@@ -107,6 +107,11 @@ All checks are pure regex / counting — no LLM call. The LLM `qa-reviewer` agen
 
 ## Procedure
 
+Review exactly the requested `bundle.languages` at `bundle.output_paths`, passing
+the selected language explicitly to the checker. Do not require an English
+document when English was not requested. Cross-language structural parity applies
+only when multiple languages are requested; shared neutral diagrams remain shared.
+
 1. **Resolve inputs.** Either pass the markdown path directly, or pass `--bundle <path>` (preferred) and read the markdown path from `bundle.output_paths`. Two sibling artifacts:
    - `docs/_shared/<basename-with-ext>/_bundles/<chunk_id_sanitized>.bundle.json` — **authoritative**; consumed by the mechanical checker `check-section-doc.py` (needs structured access to `chunk_text_sha`, `facts_slice`, `output_paths`, `profile`).
    - `docs/_shared/<basename-with-ext>/_bundles/<chunk_id_sanitized>.bundle.md` — **LLM input**; deterministic Markdown projection used by the LLM semantic review pass for intent alignment. Never pass this to `--bundle`.
@@ -122,7 +127,7 @@ All checks are pure regex / counting — no LLM call. The LLM `qa-reviewer` agen
    - `--language <en|it|…>` — language key into `bundle.output_paths`; default `en`.
    - `--section-doc <path>` — override the bundle's resolved markdown path (rarely needed; skips the staleness check).
    - `--source <path> --chunk-id <id> --language <en|it|…>` — *legacy* derivation path retained for ad-hoc runs without a bundle; does NOT perform the `chunk_text_sha` staleness check.
-   - `--profile <path>` — override profile.yaml (default `config/templates/docs/functional-analysis/default/profile.yaml`).
+  - `--profile <path>` — override profile.yaml (default `config/templates/section-doc.profile.yaml`).
    - `--json-out <path>` — override review sidecar path (default `docs/_reviews/section-doc/<file>__<chunk_id>__<lang>.json`).
    - `--no-write` — print review JSON to stdout, do not persist the sidecar.
 4. **Report.** Print one summary line: `OK  …` or `FAIL: N error(s), M warn(s)  →  <sidecar path>`. On failure, print one line per `error` finding (`[CODE] line=…  <message>`).
@@ -134,9 +139,41 @@ All checks are pure regex / counting — no LLM call. The LLM `qa-reviewer` agen
 - The semantic LLM review run is **separate** from this skill and produces a sibling sidecar (or appends to the same JSON under a distinct `semantic_findings[]` key). Do not mix the two in the same write — the LLM half is non-deterministic and should be re-runnable independently.
 - Profile thresholds are read once at the top of the run and copied verbatim into `thresholds` so the sidecar is self-describing without re-loading the profile.
 
+## Whole-source section sweep
+
+After section authoring, run [scripts/review-section-set.py](./scripts/review-section-set.py)
+to validate the complete indexed section set:
+
+```powershell
+python .github/skills/qa-reviewer/scripts/review-section-set.py `
+  --source repos/sample/COBOL/ATCCDLGH.CBL
+```
+
+- Languages come from `output.languages` in [pipeline.yaml](../../../config/pipeline.yaml);
+  `--languages it,en` overrides them. English is the fallback only when the YAML
+  language setting is omitted. Codes are normalized and deduplicated using the
+  public runners' resolver; empty or malformed lists are rejected.
+- Before invoking any checker, the sweep requires a current source manifest, a
+  non-empty, unambiguous chunks index, every indexed markdown for every requested
+  language, and its authoritative `_bundles/<chunk-filename-stem>.bundle.json`.
+  Missing directories/documents/bundles and orphan markdown files block the sweep.
+  Unrequested language trees are not checked or removed.
+- Bundle source, chunk ID, and language output paths must match the indexed
+  documents, and `facts_slice` must be present. Each checker receives `--bundle`,
+  so incoming-reference rules and embedded-text hash checks are not bypassed.
+  Re-stage bundles when adding languages or when inputs change.
+- `--source-root` and `--profile` remain available. Current child stdout/stderr
+  and failure exit codes are printed. Existing sidecars are never read to infer
+  the current run's findings; normal completed checks still write their sidecars.
+- Exit codes: `0` complete success (warnings allowed); `1` content/checker failure;
+  `2` invalid CLI/configuration; `4` missing or invalid prerequisites, incomplete
+  sections, or orphan documents; `5` stale source/bundle. Mixed child failures
+  prioritize `4`, then `5`, then `1`. Preflight failures stop before any reviews.
+
 ## Resources
 
 - [scripts/check-section-doc.py](./scripts/check-section-doc.py) — deterministic mechanical checker (entry point).
+- [scripts/review-section-set.py](./scripts/review-section-set.py) — complete indexed section-set gate.
 
 ## Pipeline Wiring
 

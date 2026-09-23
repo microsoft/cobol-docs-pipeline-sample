@@ -6,7 +6,7 @@ argument-hint: 'Source file path + optional --languages en,it. Writes docs/<lang
 
 # Section Doc Finalizer (per-file, phase C)
 
-LLM-driven phase-C authoring skill. For ONE source file, produces the file-level `index.md` (navigable TOC + executive summary) and `complete.md` (single-file concatenation of every section) per requested language. EN is the source-of-truth; non-EN siblings are co-authored in the same LLM call.
+LLM-driven phase-C authoring skill. For ONE source file, produces the file-level `index.md` (navigable TOC + executive summary) and `complete.md` (single-file concatenation of every section) for exactly `bundle.languages`, in declared order at `bundle.output_paths`. Requested editions are co-authored in the same LLM call; structural parity applies only when multiple languages are requested. Never require or create an unrequested English edition or intermediate.
 
 This is the **per-file finalizer scope** of the section-doc-writer family. The per-section [`section-doc-writer`](../section-doc-writer/SKILL.md) skill explicitly **forbids** authoring `index.md` / `complete.md`; that scope lives here.
 
@@ -23,7 +23,7 @@ Do **not** use this skill for:
 
 ## Output Contract
 
-For file `<basename-with-ext>` and each language `<lang>` in `--languages`:
+For file `<basename-with-ext>` and exactly each language `<lang>` in `bundle.languages`:
 
 ```
 docs/<lang>/<basename-with-ext>/index.md
@@ -53,7 +53,7 @@ docs/<lang>/<basename-with-ext>/complete.md
 - Preserve the original `[^src-N]` footnote ids by namespacing them per section (e.g. `[^A000-MAIN-src-1]`) to avoid collisions.
 - Append a deterministic **`# Record types (TRK)`** catalog when the source emits SISBA tracciato records. A TRK record is a level-01 `facts.json` `data_records` entry named `REC-<3-digit code>-<file>` whose `<file>` suffix is a declared output file (this excludes working-storage flags such as `REC-103-CES-FLAG`). The catalog groups records by output file and links each to the embedded section anchor carrying its byte-level layout. This is the single point at which the tracciato catalog enters the pipeline so the phase-L technical-analysis writer — which reads `complete.md` only, never `functional-analysis.md` — can author its `trk-gestiti` section instead of stamping the not-applicable marker. The catalog is built by [scripts/assemble-complete.py](./scripts/assemble-complete.py), not the LLM.
 
-A companion JSON sidecar is emitted **only on EN** at `docs/_reviews/section-doc/<file>__index__inputs.json` capturing the bundle the LLM received (sections list, manifest hash, languages).
+A companion language-neutral JSON sidecar is emitted **once per file**, independent of the requested languages, at `docs/_reviews/section-doc/<file>__index__inputs.json` capturing the bundle the LLM received (sections list, manifest hash, languages).
 
 ## Procedure
 
@@ -73,7 +73,7 @@ A companion JSON sidecar is emitted **only on EN** at `docs/_reviews/section-doc
    ```
    Flags:
    - `--source <path>` (required).
-   - `--languages <comma-list>` — default `en`. EN is always first.
+   - `--languages <comma-list>` — default `en` only when omitted; otherwise use exactly the requested languages in order, removing duplicates.
    - `--out <path>` — write to file (default: stdout).
    - `--profile <path>` — override profile.yaml.
 4. **Author.** The `section-doc-finalizer` agent reads the bundle and writes `index.md` + `complete.md` per language.
@@ -101,7 +101,11 @@ A companion JSON sidecar is emitted **only on EN** at `docs/_reviews/section-doc
         "en": "docs/en/DEMO100.CBL/sections/DEMO100__procedure-division__MAIN-PROCESSING.md",
         "it": "docs/it/DEMO100.CBL/sections/DEMO100__procedure-division__MAIN-PROCESSING.md"
       },
-      "summary_en": "First non-empty paragraph or Summary of the EN section MD (deterministic excerpt)."
+      "summaries": {
+        "en": "Deterministic summary excerpt from the English section MD.",
+        "it": "Estratto deterministico del riepilogo della sezione italiana."
+      },
+      "summary_en": "Legacy English excerpt; empty when en is not requested."
     }
     /* one entry per chunk-manifest chunk, in manifest order */
   ],
@@ -127,11 +131,17 @@ A companion JSON sidecar is emitted **only on EN** at `docs/_reviews/section-doc
 }
 ```
 
-`summary_en` is a deterministic excerpt: the first non-heading, non-blank paragraph after the `## Summary` (or legacy `## TL;DR`) block of the EN section MD, truncated to 320 characters with a trailing ellipsis on overflow.
+For each output language, use `toc[].summaries[lang]`, keyed by exactly the
+requested languages. Each value is a deterministic excerpt from that language's
+section MD: the first non-heading, non-blank paragraph after its localized
+Summary (or legacy TL;DR) block, truncated to 320 characters with a trailing
+ellipsis on overflow. Do not use `summary_en` to author another language:
+it is retained only for legacy compatibility and is empty when `en` is not
+requested. Never create English documentation to populate it.
 
 ## Determinism Rules
 
-- Bundle packager is fully deterministic: toc iteration follows manifest order, language list is sorted with EN first, sha256 over canonical-JSON of the toc subset.
+- Bundle packager is fully deterministic: toc iteration follows manifest order, the normalized language list preserves requested order with duplicates removed, sha256 over canonical-JSON of the toc subset.
 - LLM authoring is non-deterministic; the **shape** (headings, ordering, Sources block, complete.md heading shift, footnote namespacing) is fixed.
 - Forbidden re-derivations:
   - Never re-sanitize chunk ids; always look up `chunks/index.json::chunks[].file`.

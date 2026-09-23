@@ -170,6 +170,11 @@ docs/en/ORDR100.CBL/technical-analysis.md
 The same paths are produced under `docs/it/`. Reviews and language-neutral diagrams remain under
 `docs/_reviews/` and `docs/_shared/ORDR100.CBL/`.
 
+Both editions are generated because this example explicitly requests `en,it`.
+To generate Italian only, replace every language option above with `it`, or omit
+those phase options and set `output.languages: [it]` in `config/pipeline.yaml`
+(alternatively pass `-Languages it`). No English intermediate is required or generated.
+
 ## Example 5: process a mainframe workspace
 
 Use globs when the source tree follows predictable folders. In PowerShell, invoke the script in

@@ -81,7 +81,8 @@ function Get-PhaseInputs {
   if ($Files) { foreach ($f in $Files) { [void]$out.Add($f) } }
   if ($Paths) {
     foreach ($p in $Paths) {
-      Get-ChildItem -Path $p -File -ErrorAction Stop |
+      $recurse = Test-Path -LiteralPath $p -PathType Container
+      Get-ChildItem -Path $p -File -Recurse:$recurse -ErrorAction Stop |
         Where-Object { -not $excludeSet.ContainsKey($_.Extension.ToLowerInvariant()) } |
         ForEach-Object { [void]$out.Add($_.FullName) }
     }
@@ -92,7 +93,7 @@ function Get-PhaseInputs {
     if ($Files)    { $hint += "Files=$($Files -join ',')" }
     if ($Paths)    { $hint += "Paths=$($Paths -join ',')" }
     if ($Manifest) { $hint += "Manifest=$Manifest" }
-    throw "No source files resolved from inputs ($($hint -join ' ; ')). Check glob patterns -- -Paths does NOT recurse into subdirectories; e.g. 'repos/sample1/*.*' will skip files under 'repos/sample1/COBOL/'. Pass concrete subdir globs (e.g. 'repos/sample1/COBOL/*.CBL','repos/sample1/JCL/*.JCL') or use -Files / -Manifest."
+    throw "No source files resolved from inputs ($($hint -join ' ; ')). Check the paths, glob patterns, and configured exclusions."
   }
   return ,$resolved
 }
@@ -208,8 +209,18 @@ function Invoke-PhaseWithRetry {
   )
 
   $maxAttempts = $MaxRetries + 1
+  $phaseScriptName = Split-Path -Leaf $PhaseScript
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     $exitCode = 0
+    $attemptWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Host ("--- Phase {0}: attempt {1}/{2} | script={3} ---" -f `
+      $PhaseId, $attempt, $maxAttempts, $phaseScriptName)
+    Write-PhaseEvent -Phase $PhaseId -Event 'step' -Data @{
+      action       = 'attempt-start'
+      attempt      = $attempt
+      max_attempts = $maxAttempts
+      script       = $phaseScriptName
+    }
     try {
       $global:LASTEXITCODE = 0
       & $PhaseScript @PhaseArgs | Out-Host
@@ -221,6 +232,18 @@ function Invoke-PhaseWithRetry {
       [Console]::Error.WriteLine(
         "PHASE-ERROR phase=$PhaseId attempt=$attempt/$maxAttempts message=$($_.Exception.Message)"
       )
+    } finally {
+      $attemptWatch.Stop()
+    }
+
+    $attemptElapsed = [Math]::Round($attemptWatch.Elapsed.TotalSeconds, 2)
+    Write-Host ("--- Phase {0}: attempt {1}/{2} completed | exit={3} | elapsed={4}s ---" -f `
+      $PhaseId, $attempt, $maxAttempts, $exitCode, $attemptElapsed)
+    Write-PhaseEvent -Phase $PhaseId -Event 'step' -Data @{
+      action  = 'attempt-end'
+      attempt = $attempt
+      elapsed = "${attemptElapsed}s"
+      exit    = $exitCode
     }
 
     if ($exitCode -eq 0) {

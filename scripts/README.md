@@ -21,6 +21,34 @@ PowerShell and Bash are independent implementations. Bash entry points invoke th
 engines, GitHub Copilot CLI, and Pandoc directly through shared `native-*.sh` helpers. They do not
 launch PowerShell or delegate to `.ps1` files.
 
+## Concurrency
+
+Public runners keep phases sequential and parallelize work within each stage.
+`-CopilotThrottle` sets the shared LLM worker limit for D-M (1-32), overriding
+`pipeline.copilot_parallelism` in `config/pipeline.yaml`; the fallback is 16.
+Explicit `-CopilotDocsThrottle`, `-SectionFinalizerThrottle`, and `-DiagramsThrottle`
+take precedence for D, E, and H respectively. `-Throttle` controls deterministic
+batches independently. Standalone phase/dispatcher defaults are unchanged.
+
+The shared resolver is [resolve-copilot-parallelism.py](tools/resolve-copilot-parallelism.py).
+The public runners do not consume declarative `execution_mode`, `per_file_parallelism`,
+or DAG `max_parallel`. See [configuration guidance](../site-docs/guides/configuration.md#execution-settings).
+
+## Copilot model
+
+Both public runners accept `-CopilotModel <model-id|auto>`. Selection precedence is
+the explicit CLI option, `copilot.default_model` in
+[pipeline.yaml](../config/pipeline.yaml), the agent's `model:` frontmatter, then
+Copilot automatic selection. The checked-in default is `claude-sonnet-4.5`.
+Omit the configuration key to preserve each agent's default. Blank or null values
+are rejected; `auto` is an explicit override, not an absent value.
+
+[resolve-copilot-model.py](tools/resolve-copilot-model.py) resolves selection for both
+platforms. Runners transport the resolved override through the internal, phase-scoped
+`COBOL_DOCS_COPILOT_MODEL` environment variable; it is not a public configuration tier.
+PowerShell restores the previous value even on a phase failure. Standalone dispatchers
+also read the YAML model default. No agent files are rewritten.
+
 ## Platform launchers
 
 | Path | Responsibility |

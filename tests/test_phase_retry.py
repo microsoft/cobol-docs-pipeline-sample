@@ -15,7 +15,7 @@ POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 @unittest.skipUnless(POWERSHELL, "PowerShell is required for phase retry tests")
 class PhaseRetryTests(unittest.TestCase):
-    def run_retry(self, fail_until: int, max_retries: int) -> tuple[int, int]:
+    def run_retry(self, fail_until: int, max_retries: int) -> tuple[int, int, str]:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             probe_path = temp_path / "phase-probe.ps1"
@@ -63,22 +63,24 @@ exit 0
                 line for line in completed.stdout.splitlines() if line.startswith("RESULT=")
             )
             values = dict(part.split("=", 1) for part in result_line.split())
-            return int(values["RESULT"]), int(values["ATTEMPTS"])
+            return int(values["RESULT"]), int(values["ATTEMPTS"]), completed.stdout
 
     def test_retries_until_phase_succeeds(self) -> None:
-        result, attempts = self.run_retry(fail_until=2, max_retries=3)
+        result, attempts, output = self.run_retry(fail_until=2, max_retries=3)
 
         self.assertEqual(result, 0)
         self.assertEqual(attempts, 3)
+        self.assertIn("Phase TEST: attempt 1/4 | script=phase-probe.ps1", output)
+        self.assertRegex(output, r"attempt 3/4 completed \| exit=0 \| elapsed=[\d.]+s")
 
     def test_returns_final_exit_code_after_retry_exhaustion(self) -> None:
-        result, attempts = self.run_retry(fail_until=10, max_retries=3)
+        result, attempts, _ = self.run_retry(fail_until=10, max_retries=3)
 
         self.assertEqual(result, 9)
         self.assertEqual(attempts, 4)
 
     def test_zero_retries_runs_phase_once(self) -> None:
-        result, attempts = self.run_retry(fail_until=1, max_retries=0)
+        result, attempts, _ = self.run_retry(fail_until=1, max_retries=0)
 
         self.assertEqual(result, 9)
         self.assertEqual(attempts, 1)

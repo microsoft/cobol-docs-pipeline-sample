@@ -22,7 +22,7 @@ import yaml
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 DEFAULT_PROFILE = REPO_ROOT / "config" / "templates" / "docs" / "functional-analysis" / "default" / "profile.yaml"
 GLOSSARY_PATH = REPO_ROOT / "docs" / "_glossary.md"
 
@@ -66,16 +66,12 @@ def resolve_source(source: str, source_root: Path) -> Path:
 
 
 def parse_languages(value: str) -> list[str]:
-    langs = [s.strip() for s in (value or "en").split(",") if s.strip()]
-    seen: list[str] = []
-    for l in (["en"] + langs):
-        if l not in seen:
-            seen.append(l)
-    return seen
+    langs = [s.strip().lower() for s in (value or "en").split(",") if s.strip()]
+    return list(dict.fromkeys(langs))
 
 
-def excerpt_en_summary(md_path: Path) -> str:
-    """First non-heading, non-blank paragraph after `## Summary` (or legacy `## TL;DR`)."""
+def excerpt_summary(md_path: Path) -> str:
+    """First paragraph after a summary heading in the supported portal languages."""
     if not md_path.exists():
         return ""
     text = md_path.read_text(encoding="utf-8", errors="replace")
@@ -85,7 +81,7 @@ def excerpt_en_summary(md_path: Path) -> str:
     for line in lines:
         stripped = line.strip()
         if not in_tldr:
-            if re.match(r"^##\s+(?:Summary|TL;DR)\b", stripped, flags=re.IGNORECASE):
+            if re.match(r"^##\s+(?:Summary|TL;DR|Sintesi|Riepilogo|Sommario)\b", stripped, flags=re.IGNORECASE):
                 in_tldr = True
             continue
         if stripped.startswith("#"):
@@ -123,7 +119,10 @@ def build_toc(chunks_index: dict, manifest_chunks: list[dict], source_name: str,
         for lang in languages:
             rel = f"docs/{lang}/{source_name}/sections/{stem}.md"
             section_md[lang] = rel
-        en_path = REPO_ROOT / "docs" / "en" / source_name / "sections" / f"{stem}.md"
+        summaries = {
+            lang: excerpt_summary(REPO_ROOT / path)
+            for lang, path in section_md.items()
+        }
         toc.append({
             "chunk_id": cid,
             "kind": chunk.get("kind"),
@@ -132,7 +131,8 @@ def build_toc(chunks_index: dict, manifest_chunks: list[dict], source_name: str,
             "start_line": chunk.get("start_line"),
             "end_line": chunk.get("end_line"),
             "section_md": section_md,
-            "summary_en": excerpt_en_summary(en_path),
+            "summaries": summaries,
+            "summary_en": summaries.get("en", ""),
         })
     return toc
 

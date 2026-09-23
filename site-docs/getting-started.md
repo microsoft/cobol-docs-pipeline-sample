@@ -32,6 +32,15 @@ python -m pytest -q
 
 Phases A-C are the cheapest end-to-end check because they make no LLM calls.
 
+After setting `source_root`, `include`, and `exclude` in `config/pipeline.yaml`, run the configured
+source tree without repeating paths on the command line:
+
+```powershell
+pwsh -NoProfile -File scripts/run-pipeline.ps1 -From A -To C
+```
+
+The examples below select one sample file explicitly for a smaller smoke test.
+
 === "Windows PowerShell"
 
     ```powershell

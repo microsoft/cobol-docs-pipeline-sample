@@ -19,6 +19,9 @@ Your role is to generate exactly one section documentation package per run:
 ## Scope
 - Process one chunk ID per invocation.
 - Produce/update only the target files for that chunk and requested languages.
+- Write exactly `bundle.languages`, in declared order, at `bundle.output_paths`.
+  Do not add an English edition or intermediate unless requested. Keep neutral
+  diagrams shared and compare language parity only for multiple requested languages.
 - Keep edits minimal and deterministic.
 
 ## Required Outputs
@@ -35,6 +38,9 @@ For the requested chunk, generate:
 - Do not review your own output as final authority.
 - Do not invent facts not present in the bundle.
 - Do not process multiple chunks in one invocation.
+- Do not create scratch files or directories in the repository root. Any
+  temporary working artifact must stay under `temp/` and be removed before
+  returning.
 
 ## Procedure
 1. Validate input includes source and exactly one chunk ID.

@@ -44,12 +44,8 @@ def canonical_json_sha(obj: object) -> str:
 
 
 def parse_languages(value: str) -> list[str]:
-    raw = [s.strip() for s in (value or "en").split(",") if s.strip()]
-    seen: list[str] = []
-    for l in ["en", *raw]:
-        if l not in seen:
-            seen.append(l)
-    return seen
+    raw = [s.strip().lower() for s in (value or "en").split(",") if s.strip()]
+    return list(dict.fromkeys(raw))
 
 
 def load_grouping(manifest_path: Path) -> dict:
@@ -140,10 +136,11 @@ def build_member_record(member: str, languages: list[str]) -> dict:
             "index_excerpt": excerpt_head(idx),
         }
 
-    if not outputs.get("en", {}).get("exists"):
+    primary_language = languages[0]
+    if not outputs[primary_language]["exists"]:
         raise SystemExit(
-            f"ERROR: phase-E EN outputs missing for member {basename!r} \u2014 "
-            f"expected docs/en/{basename}/index.md and complete.md"
+            f"ERROR: phase-E {primary_language} outputs missing for member {basename!r} \u2014 "
+            f"expected docs/{primary_language}/{basename}/index.md and complete.md"
         )
 
     return {
@@ -170,6 +167,7 @@ def build_glossary_info() -> dict:
 
 
 def render_markdown_view(bundle: dict) -> str:
+    primary_language = bundle["languages"][0]
     lines: list[str] = []
     lines.append(f"# Group finalize bundle \u2014 `{bundle['group_id']}`\n")
     desc = bundle.get("group_description") or "(no description)"
@@ -190,12 +188,12 @@ def render_markdown_view(bundle: dict) -> str:
         lines.append(f"- chunks: {len(m['toc'])}")
         lines.append(f"- incoming_xref entries: {len(m['incoming_xref'])}")
         lines.append(f"- calls entries: {len(m['calls'])}")
-        en = m["outputs"].get("en") or {}
-        if en.get("summary"):
-            lines.append(f"\n**EN Summary:** {en['summary']}\n")
-        if en.get("index_excerpt"):
-            lines.append("\n<details><summary>EN index.md excerpt</summary>\n\n```markdown")
-            lines.append(en["index_excerpt"].rstrip())
+        primary = m["outputs"][primary_language]
+        if primary.get("summary"):
+            lines.append(f"\n**{primary_language} Summary:** {primary['summary']}\n")
+        if primary.get("index_excerpt"):
+            lines.append(f"\n<details><summary>{primary_language} index.md excerpt</summary>\n\n```markdown")
+            lines.append(primary["index_excerpt"].rstrip())
             lines.append("```\n\n</details>\n")
         lines.append("")
     return "\n".join(lines) + "\n"

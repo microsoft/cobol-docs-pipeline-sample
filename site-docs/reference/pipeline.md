@@ -34,6 +34,14 @@
 | L-M | Complete per-file or group narrative | Technical-analysis Markdown and optional DOCX |
 | N | Generated Markdown outputs | Web and offline execution portals |
 
+The prerequisites above describe required artifacts. Only YAML output selection
+automatically adds producing phases; explicit `-Phases` or `-From`/`-To` selections
+must provide them or reuse existing artifacts. In `config/pipeline.yaml`,
+`output.generate` selects file and group deliverables together; technical analysis
+does not require requirements or functional analysis. See the
+[selection contract](../guides/configuration.md#select-generated-deliverables)
+for exact phase sets and final `Run*`/`-Skip` filtering.
+
 Run [artifact inspection](../guides/artifacts.md) after A-C and before submitting model-backed
 work. Missing upstream artifacts produce exit code 4 rather than partial downstream output.
 

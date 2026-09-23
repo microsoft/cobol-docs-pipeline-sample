@@ -25,6 +25,59 @@
 #    each task (success/failure/skipped) with the result record. Enables
 #    per-task journaling, OTEL post-processing, etc. without forking.
 
+$script:CopilotDispatchRepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$script:CopilotModelSelections = @{}
+
+function Resolve-CopilotModelSelection {
+  <#
+  .SYNOPSIS
+    Resolve the runner override, pipeline default, agent frontmatter, then auto.
+  .DESCRIPTION
+    The runner scopes COBOL_DOCS_COPILOT_MODEL to phase execution. Cache by
+    context and input content so repeated task fingerprints do not spawn Python,
+    while an edited config or agent invalidates the selection in the same shell.
+  #>
+  [CmdletBinding()]
+  param(
+    [string]$RepoRoot = $script:CopilotDispatchRepoRoot,
+    [string]$AgentName,
+    [string]$ConfigPath
+  )
+  if (-not $RepoRoot) { $RepoRoot = $script:CopilotDispatchRepoRoot }
+  if (-not $ConfigPath) { $ConfigPath = Join-Path $RepoRoot 'config\pipeline.yaml' }
+  $agentPath = if ($AgentName) { Join-Path $RepoRoot ('.github\agents\{0}.agent.md' -f $AgentName) } else { '' }
+  $override = [string]$env:COBOL_DOCS_COPILOT_MODEL
+  $configHash = if (Test-Path -LiteralPath $ConfigPath) { (Get-FileHash -LiteralPath $ConfigPath -Algorithm SHA256).Hash } else { '' }
+  $agentHash = if ($agentPath -and (Test-Path -LiteralPath $agentPath)) { (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash } else { '' }
+  $key = @($RepoRoot, $ConfigPath, $configHash, $agentPath, $agentHash, $override) | ConvertTo-Json -Compress
+  if ($script:CopilotModelSelections.ContainsKey($key)) { return $script:CopilotModelSelections[$key] }
+
+  $resolver = Join-Path $script:CopilotDispatchRepoRoot 'scripts\tools\resolve-copilot-model.py'
+  $resolverArgs = @($resolver, '--config', $ConfigPath)
+  if ($override.Length -gt 0) { $resolverArgs += @('--model', $override) }
+  if ($agentPath) { $resolverArgs += @('--agent-file', $agentPath) }
+  $output = & python @resolverArgs 2>&1
+  if ($LASTEXITCODE -ne 0) { throw "Copilot model resolution failed: $($output -join [Environment]::NewLine)" }
+  $selection = ($output -join [Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop
+  if (-not $selection.model -or $selection.source -notin @('cli', 'config', 'agent', 'auto') -or
+      -not $selection.PSObject.Properties['cli_model']) {
+    throw 'Copilot model resolver returned an invalid selection.'
+  }
+  $script:CopilotModelSelections[$key] = $selection
+  return $selection
+}
+
+function Assert-CopilotModelArguments {
+  [CmdletBinding()]
+  param([string[]]$AdditionalCopilotArgs, [string]$CliModel)
+  if (-not $CliModel) { return }
+  foreach ($argument in $AdditionalCopilotArgs) {
+    if ($argument -match '^--model(?:$|[=\s])') {
+      throw 'AdditionalCopilotArgs --model conflicts with the selected CLI model; use -CopilotModel on the pipeline runner or copilot.default_model in config.'
+    }
+  }
+}
+
 function Format-NativeArg {
   [CmdletBinding()]
   param([string]$Value)
@@ -303,12 +356,13 @@ function Get-FileSha256 {
 function Get-ResumeFingerprint {
   # Deterministic content-hash fingerprint independent of file mtimes.
   # Inputs may include the bundle, the prompt template, any auxiliary
-  # files. Agent + Languages are folded in so a swap invalidates resume.
+  # files. Agent + Languages + selected model are folded in for resume.
   [CmdletBinding()]
   param(
     [Parameter(Mandatory)] [string[]]$InputFiles,
     [Parameter(Mandatory)] [string]$Agent,
-    [string]$Languages = ''
+    [string]$Languages = '',
+    [string]$WorkingDirectory
   )
   $parts = New-Object System.Collections.Generic.List[string]
   foreach ($f in $InputFiles) {
@@ -318,6 +372,9 @@ function Get-ResumeFingerprint {
   }
   $parts.Add("agent=$Agent")
   $parts.Add("langs=$Languages")
+  $selection = Resolve-CopilotModelSelection -RepoRoot $WorkingDirectory -AgentName $Agent
+  $parts.Add("model=$($selection.model)")
+  $parts.Add("cli_model=$($selection.cli_model)")
   $joined = ($parts -join ';')
   $bytes  = [System.Text.Encoding]::UTF8.GetBytes($joined)
   $sha256 = [System.Security.Cryptography.SHA256]::Create()
@@ -403,6 +460,8 @@ function Invoke-CopilotDispatchPool {
   $workArr = @($WorkItems)
   $skipArr = @($Skipped)
   $total   = $workArr.Count + $skipArr.Count
+  $modelSelection = Resolve-CopilotModelSelection -RepoRoot $WorkingDirectory -AgentName $Agent
+  Assert-CopilotModelArguments -AdditionalCopilotArgs $AdditionalCopilotArgs -CliModel $modelSelection.cli_model
 
   Write-Host ("{0} dispatch: total={1} runnable={2} skipped={3} throttle={4} agent={5}" -f `
               $LabelPrefix, $total, $workArr.Count, $skipArr.Count, $Throttle, $Agent)
@@ -443,6 +502,9 @@ function Invoke-CopilotDispatchPool {
     foreach ($p in $wi.PSObject.Properties) {
       if ($p.Name -ne 'Prompt') { $base[$p.Name] = $p.Value }
     }
+    $base.SelectedModel = $selectedModel
+    $base.ModelSource = $modelSource
+    $base.CliModel = $cliModel
 
     $argv = New-Object System.Collections.Generic.List[string]
     if ($copilotPs1) {
@@ -453,6 +515,7 @@ function Invoke-CopilotDispatchPool {
     [void]$argv.Add('--yolo')
     #[void]$argv.Add('--remote')
     if ($agentSwitch -and $agent) { [void]$argv.Add($agentSwitch); [void]$argv.Add($agent) }
+    if ($cliModel) { [void]$argv.Add('--model'); [void]$argv.Add($cliModel) }
     if ($promptSwitch) { [void]$argv.Add($promptSwitch); [void]$argv.Add([string]$wi.Prompt) }
     if ($extra) { foreach ($a in $extra) { [void]$argv.Add([string]$a) } }
 
@@ -575,6 +638,9 @@ function Invoke-CopilotDispatchPool {
     copilotSub         = $CopilotSubcommand
     pwshExe            = $copilot.PwshExe
     agent              = $Agent
+    selectedModel      = [string]$modelSelection.model
+    modelSource        = [string]$modelSelection.source
+    cliModel           = [string]$modelSelection.cli_model
     agentSwitch        = $AgentSwitch
     promptSwitch       = $PromptSwitch
     extra              = $AdditionalCopilotArgs
@@ -604,14 +670,14 @@ function Invoke-CopilotDispatchPool {
   # Resolve the per-call usage CSV target. Precedence:
   #   1. explicit -UsageCsvPath
   #   2. $env:COPILOT_USAGE_CSV
-  #   3. <WorkingDirectory>/logs/copilot-usage.csv
+  #   3. <WorkingDirectory>/temp/logs/copilot-usage.csv
   # Disabled entirely with -DisableUsageCsv.
   $usageCsvResolved = $null
   if (-not $DisableUsageCsv) {
     $usageCsvResolved =
       if ($UsageCsvPath) { $UsageCsvPath }
       elseif ($env:COPILOT_USAGE_CSV) { $env:COPILOT_USAGE_CSV }
-      else { Join-Path $WorkingDirectory 'logs/copilot-usage.csv' }
+      else { Join-Path $WorkingDirectory 'temp/logs/copilot-usage.csv' }
     if (-not [System.IO.Path]::IsPathRooted($usageCsvResolved)) {
       $usageCsvResolved = Join-Path $WorkingDirectory $usageCsvResolved
     }
@@ -625,10 +691,6 @@ function Invoke-CopilotDispatchPool {
         [System.Text.UTF8Encoding]::new($false))
     }
   }
-
-  # Resolve the agent's configured model once; used as the Model fallback when
-  # the CLI did not print a model-substitution warning for a given call.
-  $agentModel = Get-AgentModel -RepoRoot $WorkingDirectory -AgentName $Agent
 
   $csvEscape = {
     param($v)
@@ -652,9 +714,7 @@ function Invoke-CopilotDispatchPool {
       $att    = if ($record.PSObject.Properties['Attempts']) { $record.Attempts } else { '' }
       $model  =
         if ($usage.ModelUsed)      { $usage.ModelUsed }
-        elseif ($usage.ModelRequested) { $usage.ModelRequested }
-        elseif ($agentModel)       { $agentModel }
-        else { '' }
+        else { [string]$modelSelection.model }
       $cols = @(
         [DateTime]::UtcNow.ToString('o')
         $LabelPrefix

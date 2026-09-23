@@ -73,7 +73,7 @@
           "type": "string",
           "enum": ["per-file-loop", "workspace"],
           "default": "per-file-loop",
-          "description": "Execution wave: 'per-file-loop' phases run inside the per-file loop (once per source file, optionally in parallel threads when sources.yaml pipeline.per_file_parallelism > 1). 'workspace' phases run once after every file has cleared the per-file loop."
+          "description": "Execution wave: 'per-file-loop' phases run inside the per-file loop (once per source file, optionally in parallel threads when pipeline.yaml pipeline.per_file_parallelism > 1). 'workspace' phases run once after every file has cleared the per-file loop."
         },
         "max_parallel": {
           "type": "integer",

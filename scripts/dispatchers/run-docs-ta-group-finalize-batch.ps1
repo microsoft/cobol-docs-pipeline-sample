@@ -62,7 +62,8 @@ $promptTemplateText = Read-PromptTemplate -RepoRoot $repoRoot -TemplatePath $tem
 $readerScript = Join-Path $PSScriptRoot '../lib/read_groups.py'
 $groupsJson = & python $readerScript $manifestPath
 if ($LASTEXITCODE -ne 0) { throw "Failed to read groups from $manifestPath" }
-$groups = @($groupsJson | ConvertFrom-Json)
+$parsedGroups = ConvertFrom-Json -InputObject ($groupsJson -join [Environment]::NewLine)
+$groups = @($parsedGroups)
 
 if ($groups.Count -eq 0) {
   Write-Host 'run-docs-ta-group-finalize-batch: no groups declared in grouping.yaml — no-op.'

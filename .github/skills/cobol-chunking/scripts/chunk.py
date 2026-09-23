@@ -30,8 +30,7 @@ SCHEMA_PATH = SKILL_ROOT / "schemas" / "outputs.schema.json"
 # ---------- encoding -----------------------------------------------------
 
 def detect_encoding(raw: bytes) -> str:
-    """Heuristic: EBCDIC has many bytes >= 0x80 with very few ASCII; UTF-8
-    decodes cleanly; otherwise fall back to latin-1."""
+    """Detect EBCDIC or UTF-8, then prefer CP1252 before Latin-1."""
     sample = raw[:4096]
     # EBCDIC fingerprint: presence of 0x40 (space) and lots of
     # 0xC1-0xC9 / 0xD1-0xD9 (A-I, J-R) and few 0x20.
@@ -45,6 +44,11 @@ def detect_encoding(raw: bytes) -> str:
         # If it's ASCII-only or valid UTF-8, prefer utf-8.
         raw.decode("utf-8")
         return "utf-8"
+    except UnicodeDecodeError:
+        pass
+    try:
+        raw.decode("cp1252")
+        return "cp1252"
     except UnicodeDecodeError:
         pass
     return "latin-1"
@@ -78,6 +82,7 @@ def detect_kind(lines: list[str], hint: str, ext: str) -> str:
         return "bms"
     if ext in ("cpy",):
         return "copybook"
+    has_cobol_division = False
     for raw in lines[:200]:
         s = raw.strip()
         if not s:
@@ -89,12 +94,15 @@ def detect_kind(lines: list[str], hint: str, ext: str) -> str:
             return "jcl"
         if "DFHMSD" in u:
             return "bms"
+        ind, body = cobol_area(raw)
+        if not is_comment(ind) and DIVISION_RE.match(body):
+            has_cobol_division = True
         if "IDENTIFICATION DIVISION" in u or u.startswith("CBL "):
             return "cobol"
         if u.startswith("PROC ") or " PROC " in u or u.endswith(" PEND"):
             return "proc"
     if ext in ("cbl", "cob", "cblle", "sqlcblle"):
-        return "cobol"
+        return "cobol" if has_cobol_division else "copybook"
     return "copybook"
 
 
@@ -159,6 +167,7 @@ PROGRAM_ID_RE = re.compile(r"^\s*PROGRAM-ID\s*\.\s*([A-Z0-9-]+)", re.I)
 EXEC_OPEN_RE = re.compile(r"^\s*EXEC\s+(SQL|CICS)\b", re.I)
 EXEC_CLOSE_RE = re.compile(r"\bEND-EXEC\b", re.I)
 DATA_01_RE = re.compile(r"^\s*0?1\s+([A-Z0-9][A-Z0-9-]*)", re.I)
+DATA_LEVEL_RE = re.compile(r"^\s*(0?[1-9]|[1-4][0-9])\s+([A-Z0-9][A-Z0-9-]*)", re.I)
 
 # Tokens that look like paragraphs but are really verbs/clauses we must
 # never treat as paragraph headers.
@@ -605,14 +614,22 @@ def chunk_cl(lines: list[str], source_path: str) -> list[dict]:
 def chunk_copybook(lines: list[str], source_path: str) -> list[dict]:
     chunks: list[dict] = []
     n = len(lines)
-    records: list[tuple[int, str]] = []
+    declarations: list[tuple[int, int, str]] = []
     for i, raw in enumerate(lines, start=1):
         ind, body = cobol_area(raw)
         if is_comment(ind) or not body.strip():
             continue
-        m = DATA_01_RE.match(body)
-        if m and body[:4].strip():
-            records.append((i, m.group(1).upper()))
+        match = DATA_LEVEL_RE.match(body)
+        if match:
+            declarations.append((i, int(match.group(1)), match.group(2).upper()))
+    minimum_level = min((level for _, level, _ in declarations), default=None)
+    records = [
+        (line, name)
+        for line, level, name in declarations
+        if level == minimum_level
+    ]
+    if not records and n:
+        records.append((1, Path(source_path).stem.upper()))
     for idx, (ln, name) in enumerate(records):
         end = records[idx + 1][0] - 1 if idx + 1 < len(records) else n
         chunks.append({
@@ -686,7 +703,7 @@ def main() -> int:
                    choices=["auto", "utf-8", "cp037", "cp1047", "cp1140", "cp1252", "latin-1"])
     args = p.parse_args()
 
-    cfg = yaml.safe_load((REPO_ROOT / "config" / "sources.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load((REPO_ROOT / "config" / "pipeline.yaml").read_text(encoding="utf-8"))
     source_root = Path(args.source_root or cfg.get("source_root", "./samples"))
     if not source_root.is_absolute():
         source_root = (REPO_ROOT / source_root).resolve()

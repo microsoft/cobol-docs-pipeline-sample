@@ -14,7 +14,9 @@
     -From/-To inclusive range (e.g. -From C -To E)
     -Skip     phase ids to drop from the selected set
 
-  When -Phases is given, -From / -To / -Skip are ignored.
+  Without explicit phase/range selectors, output.generate in config/pipeline.yaml
+  selects outputs and their prerequisites. Explicit selectors override it.
+  When -Phases is given, -From / -To are ignored. -Skip is always applied last.
 
   Legacy switches (-RunCopilotDocs, -RunSectionFinalizer,
   -RunFunctionalAnalysis, -RunWorkspaceXrefPass) remain supported and
@@ -30,10 +32,23 @@
   Optional JSON/CSV manifest with at least a 'path' column/property.
 
 .PARAMETER SourceRoot
-  Optional source root passed to all child scripts.
+  Source root passed to all child scripts. The config/pipeline.yaml
+  include/exclude rules apply to selected files below this root. When no
+  Files, Paths, or Manifest selector is supplied, the runner recursively
+  discovers files below this root. When omitted, source_root is read from
+  config/pipeline.yaml for discovery and filtering.
 
 .PARAMETER Throttle
-  Parallel degree for each batch step.
+  Parallel degree for deterministic batch steps; independent of Copilot concurrency.
+
+.PARAMETER CopilotThrottle
+  Shared Copilot concurrency for phases D-M (1-32). Defaults to
+  pipeline.copilot_parallelism in config/pipeline.yaml, or 16 when omitted.
+
+.PARAMETER CopilotModel
+  Copilot CLI model ID for this run, overriding copilot.default_model in
+  config/pipeline.yaml, then agent model frontmatter, then automatic selection.
+  Use 'auto' to explicitly request automatic selection.
 
 .PARAMETER ResultsDir
   Folder where XML result files are written.
@@ -42,7 +57,7 @@
   Maximum retries after a phase failure. Defaults to 3; use 0 to disable retries.
 
 .PARAMETER Phases
-  Explicit subset of phases to run. Defaults to the full pipeline.
+  Explicit subset, overriding output.generate without adding prerequisites.
 
 .PARAMETER From
   Run phases starting at this id (inclusive). Ignored if -Phases is set.
@@ -66,7 +81,7 @@
   Phase D agent. Default: section-doc-writer.
 
 .PARAMETER CopilotDocsThrottle
-  Phase D parallel limit. Default: 10.
+  Phase D parallel limit (1-32). Defaults to the shared Copilot limit.
 
 .PARAMETER CopilotDocsTrackUsage
   Phase D: enable per-task Copilot usage tracking via OTEL file exporter. Default: on.
@@ -80,14 +95,20 @@
 .PARAMETER RunSectionFinalizer
   Legacy: when $false, drops phase E from the selected set.
 
+.PARAMETER Languages
+  Shared documentation languages for phases D/E/F/G/I/J/K/L/M.
+  Defaults to output.languages in config/pipeline.yaml, then en.
+  Only requested languages are included. Explicit phase language options take precedence.
+
 .PARAMETER SectionFinalizerLanguages
-  Phase E languages. Default: en.
+  Phase D section authoring and phase E finalization language override.
+  Defaults to -Languages / output.languages.
 
 .PARAMETER SectionFinalizerAgent
   Phase E agent. Default: section-doc-finalizer.
 
 .PARAMETER SectionFinalizerThrottle
-  Phase E Copilot dispatch throttle. Default: 4.
+  Phase E Copilot dispatch throttle (1-32). Defaults to the shared Copilot limit.
 
 .PARAMETER SectionFinalizerDryRun
   Phase E dry-run.
@@ -99,7 +120,7 @@
   Legacy: when $false, drops phase G from the selected set.
 
 .PARAMETER FunctionalAnalysisLanguages
-  Phase G languages. Default: en.
+  Phase G language override. Defaults to -Languages / output.languages.
 
 .PARAMETER FunctionalAnalysisProfile
   Phase G profile override.
@@ -111,7 +132,7 @@
   Phase G: re-stage even when up-to-date.
 
 .PARAMETER RequirementsLanguages
-  Phase F languages. Default: en.
+  Phase F language override. Defaults to -Languages / output.languages.
 
 .PARAMETER RequirementsProfile
   Phase F profile override.
@@ -129,7 +150,7 @@
   Phase H agent. Default: diagram-renderer.
 
 .PARAMETER DiagramsThrottle
-  Phase H parallel limit. Default: 4.
+  Phase H parallel limit (1-32). Defaults to the shared Copilot limit.
 
 .EXAMPLE
   pwsh -File scripts/run-pipeline.ps1 -Paths repos/sample1/COBOL/*.CBL
@@ -146,7 +167,10 @@ param(
   [string[]]$Paths,
   [string]$Manifest,
   [string]$SourceRoot,
+  [string]$Languages,
   [int]$Throttle = [Environment]::ProcessorCount,
+  [string]$CopilotThrottle,
+  [string]$CopilotModel,
   [string]$ResultsDir = 'temp',
   [ValidateRange(0, 100)]
   [int]$MaxPhaseRetries = 3,
@@ -171,33 +195,33 @@ param(
   # Phase D
   [switch]$CopilotDocsDryRun    = $false,
   [string]$CopilotDocsAgent     = 'section-doc-writer',
-  [int]   $CopilotDocsThrottle  = 15,
+  [string]$CopilotDocsThrottle,
   [bool]$CopilotDocsTrackUsage = $true,
   [string]$CopilotDocsOtelDir,
   [double]$CopilotDocsPremiumMultiplier = 1,
 
   # Phase E
-  [string]$SectionFinalizerLanguages = 'en',
+  [string]$SectionFinalizerLanguages,
   [string]$SectionFinalizerAgent     = 'section-doc-finalizer',
-  [int]   $SectionFinalizerThrottle  = 4,
+  [string]$SectionFinalizerThrottle,
   [switch]$SectionFinalizerDryRun,
   [switch]$SectionFinalizerForce,
 
   # Phase H
   [switch]$RunDiagrams              = $true,
   [string]$DiagramsAgent            = 'diagram-renderer',
-  [int]   $DiagramsThrottle         = 4,
+  [string]$DiagramsThrottle,
   [switch]$DiagramsDryRun,
   [switch]$DiagramsForce,
 
   # Phase G
-  [string]$FunctionalAnalysisLanguages = 'en',
+  [string]$FunctionalAnalysisLanguages,
   [string]$FunctionalAnalysisProfile,
   [switch]$FunctionalAnalysisPrune,
   [switch]$FunctionalAnalysisForce,
 
   # Phase F
-  [string]$RequirementsLanguages = 'en',
+  [string]$RequirementsLanguages,
   [string]$RequirementsProfile,
   [switch]$RequirementsPrune,
   [switch]$RequirementsForce,
@@ -209,7 +233,7 @@ param(
 
   # Phase L (per-file technical analysis / ATE + DOCX)
   [switch]$RunTechnicalAnalysis        = $true,
-  [string]$TechnicalAnalysisLanguages  = 'en',
+  [string]$TechnicalAnalysisLanguages,
   [string]$TechnicalAnalysisProfile,
   [string]$PandocPath                  = 'pandoc',
   [switch]$TechnicalAnalysisSkipDocx,
@@ -222,7 +246,7 @@ param(
   [switch]$RunGroupRequirements       = $true,
   [switch]$RunGroupFunctionalAnalysis = $true,
   [string]$GroupingManifest           = 'config/grouping.yaml',
-  [string]$GroupLanguages             = 'en',
+  [string]$GroupLanguages,
   [string]$GroupRequirementsProfile,
   [string]$GroupFunctionalAnalysisProfile,
   [switch]$GroupPrune,
@@ -250,15 +274,93 @@ foreach ($k in (Get-PhaseScriptMap).Keys) {
   $phaseScripts[$k] = Join-Path $repoRoot (Get-PhaseScriptMap)[$k]
 }
 $phaseOrder = @((Get-PhaseScriptMap).Keys)
+$phaseNames = @{
+  A = 'Chunk sources'
+  B = 'Extract facts and cross-references'
+  C = 'Extract chunk text'
+  D = 'Author section documentation'
+  E = 'Finalize file documentation'
+  F = 'Generate technical requirements'
+  G = 'Generate functional analysis'
+  H = 'Generate overview diagrams'
+  I = 'Finalize group documentation'
+  J = 'Generate group requirements'
+  K = 'Generate group functional analysis'
+  L = 'Generate file technical analysis'
+  M = 'Generate group technical analysis'
+  N = 'Build documentation portal'
+}
 
-if (-not $Files -and -not $Paths -and -not $Manifest) {
-  throw 'No inputs. Provide -Files, -Paths, or -Manifest.'
+$discoverScript = Join-Path $repoRoot 'scripts/tools/discover-sources.py'
+$sourcesConfig = Join-Path $repoRoot 'config/pipeline.yaml'
+$modelArgs = @(
+  (Join-Path $repoRoot 'scripts/tools/resolve-copilot-model.py'),
+  '--config', $sourcesConfig
+)
+if ($PSBoundParameters.ContainsKey('CopilotModel')) { $modelArgs += "--model=$CopilotModel" }
+$modelOutput = @(& python @modelArgs)
+if ($LASTEXITCODE -ne 0 -or $modelOutput.Count -ne 1) {
+  throw 'Copilot model configuration failed. See the preceding error.'
+}
+$modelSelection = $modelOutput[0] | ConvertFrom-Json
+$modelOverride = if ($modelSelection.source -in @('cli', 'config')) { $modelSelection.model } else { '' }
+Write-Host ("Copilot model: {0}" -f $(if ($modelOverride) { $modelOverride } else { 'agent frontmatter / auto' }))
+$parallelismArgs = @(
+  (Join-Path $repoRoot 'scripts/tools/resolve-copilot-parallelism.py'),
+  '--config', $sourcesConfig
+)
+$parallelismOptions = @{
+  CopilotThrottle = '--throttle'
+  CopilotDocsThrottle = '--sections'
+  SectionFinalizerThrottle = '--finalizer'
+  DiagramsThrottle = '--diagrams'
+}
+foreach ($name in $parallelismOptions.Keys) {
+  if ($PSBoundParameters.ContainsKey($name)) {
+    $parallelismArgs += "$($parallelismOptions[$name])=$($PSBoundParameters[$name])"
+  }
+}
+$resolvedParallelism = @(& python @parallelismArgs)
+if ($LASTEXITCODE -ne 0 -or $resolvedParallelism.Count -ne 4) {
+  throw 'Copilot concurrency configuration failed. See the preceding error.'
+}
+$CopilotThrottle, $CopilotDocsThrottle, $SectionFinalizerThrottle, $DiagramsThrottle = $resolvedParallelism
+Write-Host ("Copilot concurrency: shared={0}; D={1}; E={2}; H={3}" -f $resolvedParallelism)
+
+$languageArgs = @(
+  (Join-Path $repoRoot 'scripts/tools/resolve-output-languages.py'),
+  '--config', $sourcesConfig
+)
+$languageOptions = @{
+  Languages = '--languages'
+  SectionFinalizerLanguages = '--sections'
+  RequirementsLanguages = '--requirements'
+  FunctionalAnalysisLanguages = '--functional-analysis'
+  TechnicalAnalysisLanguages = '--technical-analysis'
+  GroupLanguages = '--groups'
+}
+foreach ($name in $languageOptions.Keys) {
+  if ($PSBoundParameters.ContainsKey($name)) {
+    $languageArgs += "$($languageOptions[$name])=$($PSBoundParameters[$name])"
+  }
+}
+$resolvedLanguages = @(& python @languageArgs)
+if ($LASTEXITCODE -ne 0 -or $resolvedLanguages.Count -ne 5) {
+  throw 'Output language configuration failed. See the preceding error.'
+}
+$SectionFinalizerLanguages, $RequirementsLanguages, $FunctionalAnalysisLanguages,
+  $TechnicalAnalysisLanguages, $GroupLanguages = $resolvedLanguages
+Write-Host ("Output languages: sections={0}; requirements={1}; functional={2}; technical={3}; groups={4}" -f $resolvedLanguages)
+
+$configuredPhases = @(& python (Join-Path $repoRoot 'scripts/tools/resolve-output-phases.py') --config $sourcesConfig)
+if ($LASTEXITCODE -ne 0) {
+  throw 'Output generation configuration failed. See the preceding error.'
 }
 
 # --- Resolve effective phase list -------------------------------------------
 if ($Phases) {
   $selected = $phaseOrder | Where-Object { $Phases -contains $_ }
-} else {
+} elseif ($PSBoundParameters.ContainsKey('From') -or $PSBoundParameters.ContainsKey('To')) {
   $startIdx = 0
   $endIdx   = $phaseOrder.Count - 1
   if ($From) {
@@ -273,6 +375,9 @@ if ($Phases) {
     throw "-From '$From' is after -To '$To'."
   }
   $selected = $phaseOrder[$startIdx..$endIdx]
+} else {
+  $selected = $configuredPhases
+  Write-Host "Configured output phases (including prerequisites): $($selected -join ',')"
 }
 
 # Legacy toggles drop phases from the selected set.
@@ -300,6 +405,38 @@ $selected = @($selected)
 if ($selected.Count -eq 0) {
   Write-Host 'No phases selected. Nothing to do.'
   exit 0
+}
+
+if (-not $Files -and -not $Paths -and -not $Manifest) {
+  $discoverArgs = @($discoverScript, '--config', $sourcesConfig)
+  if ($SourceRoot) { $discoverArgs += @('--source-root', $SourceRoot) }
+  $discovered = @(& python @discoverArgs)
+  if ($LASTEXITCODE -ne 0) { throw 'Source discovery failed. See the preceding error.' }
+  if ($discovered.Count -lt 2) {
+    throw 'No source files matched config/pipeline.yaml include/exclude rules.'
+  }
+  $SourceRoot = $discovered[0]
+  $Files = @($discovered[1..($discovered.Count - 1)])
+  Write-Host "Discovered $($Files.Count) source file(s) under $SourceRoot"
+}
+else {
+  $resolvedSelectors = @(
+    @(Get-PhaseInputs `
+      -Files $Files -Paths $Paths -Manifest $Manifest -ExcludeExtensions @()) |
+      ForEach-Object { $_ }
+  )
+  $filterArgs = @($discoverScript, '--config', $sourcesConfig, '--filter-candidates')
+  if ($SourceRoot) { $filterArgs += @('--source-root', $SourceRoot) }
+  $filteredFiles = @($resolvedSelectors | & python @filterArgs)
+  if ($LASTEXITCODE -ne 0) { throw 'Source filtering failed. See the preceding error.' }
+  if ($filteredFiles.Count -eq 0) {
+    throw 'No selected source files matched config/pipeline.yaml include/exclude rules.'
+  }
+  $excludedCount = $resolvedSelectors.Count - $filteredFiles.Count
+  $Files = $filteredFiles
+  $Paths = $null
+  $Manifest = $null
+  Write-Host "Selected $($Files.Count) source file(s); excluded $excludedCount by config/pipeline.yaml rules."
 }
 
 foreach ($id in $selected) {
@@ -338,6 +475,7 @@ $phasePlan = @(
   @{ Id = 'D'; Extra = {
       $h = @{
         Agent        = $CopilotDocsAgent
+        Languages    = $SectionFinalizerLanguages
         DocsThrottle = $CopilotDocsThrottle
         DryRun       = [bool]$CopilotDocsDryRun
       }
@@ -363,7 +501,8 @@ $phasePlan = @(
       $h
     } }
   @{ Id = 'F'; Extra = {
-      $h = @{ Languages = $RequirementsLanguages; PandocPath = $PandocPath }
+      $h = @{ Languages = $RequirementsLanguages; PandocPath = $PandocPath
+        SectionThrottle = $CopilotThrottle; FinalizerThrottle = $CopilotThrottle }
       if ($RequirementsProfile) { $h.ProfileName = $RequirementsProfile }
       if ($RequirementsPrune)   { $h.Prune       = $true }
       if ($RequirementsForce)   { $h.Force       = $true }
@@ -371,7 +510,8 @@ $phasePlan = @(
       $h
     } }
   @{ Id = 'G'; Extra = {
-      $h = @{ Languages = $FunctionalAnalysisLanguages; PandocPath = $PandocPath }
+      $h = @{ Languages = $FunctionalAnalysisLanguages; PandocPath = $PandocPath
+        SectionThrottle = $CopilotThrottle; FinalizerThrottle = $CopilotThrottle }
       if ($FunctionalAnalysisProfile) { $h.ProfileName = $FunctionalAnalysisProfile }
       if ($FunctionalAnalysisPrune)   { $h.Prune       = $true }
       if ($FunctionalAnalysisForce)   { $h.Force       = $true }
@@ -389,6 +529,7 @@ $phasePlan = @(
     } }
   @{ Id = 'I'; Workspace = $true; Extra = {
       $h = @{
+        FinalizerThrottle = $CopilotThrottle
         Manifest  = $GroupingManifest
         Languages = $GroupLanguages
         PandocPath = $PandocPath
@@ -400,6 +541,8 @@ $phasePlan = @(
     } }
   @{ Id = 'J'; Workspace = $true; Extra = {
       $h = @{
+        SectionThrottle = $CopilotThrottle
+        FinalizerThrottle = $CopilotThrottle
         Manifest  = $GroupingManifest
         Languages = $GroupLanguages
         PandocPath = $PandocPath
@@ -413,6 +556,8 @@ $phasePlan = @(
     } }
   @{ Id = 'K'; Workspace = $true; Extra = {
       $h = @{
+        SectionThrottle = $CopilotThrottle
+        FinalizerThrottle = $CopilotThrottle
         Manifest  = $GroupingManifest
         Languages = $GroupLanguages
         PandocPath = $PandocPath
@@ -426,6 +571,7 @@ $phasePlan = @(
     } }
   @{ Id = 'L'; Extra = {
       $h = @{
+        FinalizerThrottle = $CopilotThrottle
         Languages  = $TechnicalAnalysisLanguages
         PandocPath = $PandocPath
       }
@@ -437,6 +583,7 @@ $phasePlan = @(
     } }
   @{ Id = 'M'; Workspace = $true; Extra = {
       $h = @{
+        FinalizerThrottle = $CopilotThrottle
         Manifest   = $GroupingManifest
         Languages  = $GroupLanguages
         PandocPath = $PandocPath
@@ -460,8 +607,18 @@ $phasePlan = @(
 
 Write-Host ("=== Pipeline start: {0} (max phase retries: {1}) ===" -f `
   ($selected -join ' -> '), $MaxPhaseRetries)
+$selectorSummary =
+  if ($Manifest) { "manifest=$Manifest" }
+  elseif ($Paths) { "paths=$($Paths.Count)" }
+  else { "files=$($Files.Count)" }
+Write-Host ("Context: source-root={0} | selector={1} | throttle={2} | results={3}" -f `
+  $(if ($SourceRoot) { $SourceRoot } else { '<configured/default>' }), `
+  $selectorSummary, $Throttle, $resultsDirFull)
 
+$phaseNumber = 0
+$phaseCount = @($phasePlan).Count
 foreach ($entry in $phasePlan) {
+  $phaseNumber++
   $id          = $entry.Id
   $phaseScript = $phaseScripts[$id]
   $base        = if ($entry.Workspace) { $groupShared } else { $shared }
@@ -469,8 +626,23 @@ foreach ($entry in $phasePlan) {
   foreach ($kv in (& $entry.Extra).GetEnumerator()) {
     $phaseArgs[$kv.Key] = $kv.Value
   }
-  $phaseExit = Invoke-PhaseWithRetry -PhaseId $id -PhaseScript $phaseScript `
-    -PhaseArgs $phaseArgs -MaxRetries $MaxPhaseRetries
+  $scope = if ($entry.Workspace) { 'workspace' } else { 'per-file' }
+  $optionNames = @($phaseArgs.Keys |
+    Where-Object { $_ -notin @('Files', 'Paths', 'Manifest', 'SourceRoot') } |
+    Sort-Object)
+  Write-Host ''
+  Write-Host ("=== [{0}/{1}] Phase {2}: {3} ===" -f `
+    $phaseNumber, $phaseCount, $id, $phaseNames[$id])
+  Write-Host ("Scope: {0} | script={1}" -f $scope, (Split-Path -Leaf $phaseScript))
+  Write-Host ("Options: {0}" -f $(if ($optionNames.Count) { $optionNames -join ', ' } else { '<none>' }))
+  # Scoped environment transport reaches both in-process and child dispatchers.
+  $previousModel = $env:COBOL_DOCS_COPILOT_MODEL
+  try {
+    $env:COBOL_DOCS_COPILOT_MODEL = $modelOverride
+    $phaseExit = Invoke-PhaseWithRetry -PhaseId $id -PhaseScript $phaseScript `
+      -PhaseArgs $phaseArgs -MaxRetries $MaxPhaseRetries
+  }
+  finally { $env:COBOL_DOCS_COPILOT_MODEL = $previousModel }
   if ($phaseExit -ne 0) {
     Write-Host ("=== Pipeline aborted at phase {0} after {1} attempt(s) (exit={2}) ===" -f `
       $id, ($MaxPhaseRetries + 1), $phaseExit)

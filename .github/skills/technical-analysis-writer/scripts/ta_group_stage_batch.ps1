@@ -43,7 +43,8 @@ if (-not (Test-Path -LiteralPath $readerScript)) {
 }
 $groupsJson = & python $readerScript $manifestPath
 if ($LASTEXITCODE -ne 0) { throw "Failed to read groups from $manifestPath" }
-$groupIds = @(@($groupsJson | ConvertFrom-Json) | ForEach-Object { "$($_.id)".Trim() })
+$parsedGroups = ConvertFrom-Json -InputObject ($groupsJson -join [Environment]::NewLine)
+$groupIds = @(@($parsedGroups) | ForEach-Object { "$($_.id)".Trim() })
 $groupIds = @($groupIds | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 
 if ($groupIds.Count -eq 0) {

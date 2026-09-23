@@ -9,7 +9,7 @@
     E.1  .github/skills/section-doc-finalizer/scripts/finalize_stage_batch.ps1
     E.2  scripts/dispatchers/run-docs-finalize-batch.ps1
 
-  Prereqs per source: at least one docs/en/<basename>/sections/*.md.
+  Prereqs per source: at least one docs/<first-language>/<basename>/sections/*.md.
   On a missing prereq, exits with code 4.
 
 .PARAMETER Languages
@@ -63,8 +63,9 @@ if (-not $Files -and -not $Paths -and -not $Manifest) {
 }
 
 $sources = Get-PhaseInputs -Files $Files -Paths $Paths -Manifest $Manifest
+$primaryLanguage = ($Languages -split ',')[0].Trim().ToLowerInvariant()
 Assert-PhasePrereqs -RepoRoot $repoRoot -Sources $sources -PhaseId E `
-  -RequiredArtifacts @('docs/en/<basename>/sections/*.md')
+  -RequiredArtifacts @("docs/$primaryLanguage/<basename>/sections/*.md")
 
 New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
 $resultsDirFull = (Resolve-Path -LiteralPath $ResultsDir).Path

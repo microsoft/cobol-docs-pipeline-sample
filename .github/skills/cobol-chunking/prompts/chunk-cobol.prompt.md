@@ -4,7 +4,7 @@ description: 'Generate chunk-manifest.json for one or more mainframe sources (CO
 
 # Chunk mainframe source → chunk-manifest.json
 
-Use the [`cobol-chunking`](../SKILL.md) skill to produce a `chunk-manifest.json` for each source the user specifies (or, if none specified, every file matched by `config/sources.yaml::include`).
+Use the [`cobol-chunking`](../SKILL.md) skill to produce a `chunk-manifest.json` for each source the user specifies (or, if none specified, every file matched by `config/pipeline.yaml::include`).
 
 For each target file:
 
@@ -18,6 +18,6 @@ For each target file:
      [--output <out>] `
      [--kind-hint auto]
    ```
-   Path resolution: `--source` is tried first relative to repo root, then relative to `source_root` from `config/sources.yaml`.
+   Path resolution: `--source` is tried first relative to repo root, then relative to `source_root` from `config/pipeline.yaml`.
 4. Report per file: total chunk count, breakdown by kind, detected encoding, sha256 prefix, output path, and any entries in `errors[]`.
 5. Do NOT proceed to facts extraction or doc generation — those are downstream phases (see `config/pipeline-dag.yaml`).

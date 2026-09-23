@@ -16,13 +16,15 @@ the bundle's `scope` field tells you which.
 - `per-group` — author ONE `technical-analysis.md` per language for ONE group.
 
 This is a SINGLE-PASS finalizer: there are no per-section drafts. The
-consolidated narrative source is the embedded EN `complete.md` content
-(per-file: `docs/en/<file>/complete.md`; per-group:
-`docs/en/_groups/<group_id>/complete.md`). You reorganize and rewrite that
+consolidated narrative source is the embedded `complete.md` content selected
+from `bundle.languages[0]` (per-file: `docs/<lang>/<file>/complete.md`; per-group:
+`docs/<lang>/_groups/<group_id>/complete.md`). Do not require an English intermediate.
+You reorganize and rewrite that
 material into the resolved technical-analysis profile/template structure.
 
-Both scopes co-author EN + every target language in the SAME LLM call. EN is
-the source of truth; the non-EN editions must mirror it structurally 1:1
+Both scopes author exactly `bundle.languages`, in its declared order, at
+`bundle.output_paths` in the SAME LLM call. Never add an unrequested English
+edition. For multiple requested languages, align structure 1:1
 (heading count, table row count, `[^src-N]` ids, front-matter keys).
 
 ## Reuse First
@@ -131,7 +133,7 @@ per-group:
   preview the plan, do not ask questions, do not request confirmation.
 - Do not read `facts.json`, `complete.md`, `profile.yaml`, or the full
   `template.md` at runtime — the bundle MD already embeds everything needed.
-- Co-author EN + every target language in the SAME response.
+- Author exactly the requested languages in the SAME response.
 - DOCX conversion is NOT your job; the phase L/M driver runs pandoc on the
   `technical-analysis.md` you write. Produce Markdown only.
 - When done, print ONE short final line of the form

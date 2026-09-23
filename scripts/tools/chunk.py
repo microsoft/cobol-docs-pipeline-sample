@@ -680,7 +680,7 @@ def main() -> int:
                    choices=["auto", "utf-8", "cp037", "cp1047", "cp1140", "cp1252", "latin-1"])
     args = p.parse_args()
 
-    cfg = yaml.safe_load((REPO_ROOT / "config" / "sources.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load((REPO_ROOT / "config" / "pipeline.yaml").read_text(encoding="utf-8"))
     source_root = Path(args.source_root or cfg.get("source_root", "./samples"))
     if not source_root.is_absolute():
         source_root = (REPO_ROOT / source_root).resolve()

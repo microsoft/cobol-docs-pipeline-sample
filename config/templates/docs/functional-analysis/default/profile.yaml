@@ -1,0 +1,96 @@
+name: default
+version: "1.0"
+document_type: functional-analysis
+
+identifier_lock_regex: "[A-Z][A-Z0-9-]*(\\.[A-Z0-9-]+)?"
+require_citations: true
+
+front_matter:
+  title_pattern: "Functional analysis - {{PROGRAM_ID}}"
+  show_classification: true
+  show_metadata_table: true
+  classification:
+    default: Internal
+  state_options:
+    - DRAFT
+  template_version: "1.0"
+
+sections:
+  - id: header
+    title: Functional analysis
+    required: true
+
+  - id: scopo-ambito
+    number: "1"
+    title: Purpose and scope
+    required: true
+    min_paragraphs: 1
+
+  - id: sistemi-e-ruoli
+    number: "2"
+    title: Systems and roles
+    required: true
+    min_paragraphs: 1
+
+  - id: processi-business
+    number: "3"
+    title: Business processes
+    required: true
+    min_paragraphs: 1
+
+  - id: elenco-funzionalita
+    number: "4"
+    title: Functional capabilities
+    required: true
+    min_paragraphs: 1
+
+  - id: focus-elaborazioni
+    number: "5"
+    title: Processing rules
+    required: false
+    optional_marker: "No source-backed processing rules were identified."
+
+  - id: flussi-input
+    number: "6"
+    title: Input and output flows
+    required: false
+    optional_marker: "No source-backed input or output flows were identified."
+
+  - id: tipologie-record
+    number: "7"
+    title: Data and record types
+    required: false
+    optional_marker: "No source-backed data or record types were identified."
+
+  - id: vincoli-dipendenze
+    number: "8"
+    title: Interfaces and dependencies
+    required: false
+    optional_marker: "No source-backed interfaces or dependencies were identified."
+
+  - id: gestione-stati
+    number: "9"
+    title: State management
+    required: false
+    optional_marker: "No source-backed state transitions were identified."
+
+  - id: gestione-errori
+    number: "10"
+    title: Error handling
+    required: false
+    optional_marker: "No source-backed error-handling behavior was identified."
+
+  - id: profili-protezione-dati
+    number: "11"
+    title: Security and data protection
+    required: false
+    optional_marker: "No source-backed security or data-protection controls were identified."
+
+  - id: open-points
+    number: "12"
+    title: Open points
+    required: false
+    optional_marker: "No source-backed open points were identified."
+
+footer:
+  text: "Generated from source-backed pipeline evidence."

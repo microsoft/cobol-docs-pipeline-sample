@@ -1,7 +1,7 @@
 ---
 name: functional-analysis-writer
 description: 'Author phase-G functional analysis for ONE mainframe or IBM i (AS400) COBOL source against the configured profile. Reads one prepared bundle and writes per-language section drafts or final functional-analysis.md. USE FOR: COBOL or ILE COBOL functional analysis, IBM i analysis, AFU sections, phase G authoring and finalization. DO NOT USE FOR: section docs, chunking, facts extraction, QA review, or portal build.'
-argument-hint: 'Per-section: --bundle <docs/_shared/<file>/_fa-bundles/<section_id>.bundle.md>. Per-file finalizer: --bundle <docs/_shared/<file>/_fa-bundles/_finalize.bundle.md>. Output paths live in the bundle Metadata + Output paths blocks. Always co-authors EN + every requested target language in one LLM call.'
+argument-hint: 'Per-section: --bundle <docs/_shared/<file>/_fa-bundles/<section_id>.bundle.md>. Per-file finalizer: --bundle <docs/_shared/<file>/_fa-bundles/_finalize.bundle.md>. Output paths live in the bundle Metadata + Output paths blocks. Authors exactly bundle.languages in one LLM call.'
 ---
 
 # Functional Analysis Writer (per-FA-section + per-file finalizer, phase G)
@@ -42,7 +42,9 @@ Do **not** use this skill for:
 
 ### Per-section scope
 
-For each language `<lang>` in `bundle.languages` (EN first, then every target):
+For exactly each language `<lang>` in `bundle.languages`, in its declared order,
+use `bundle.output_paths` verbatim. Never add an unrequested English edition or
+intermediate; English is the default only when no language is provided.
 
 ```
 docs/_shared/<file>/_fa-sections/<lang>/<section_id>.md
@@ -80,9 +82,9 @@ The draft MUST:
   emit one H3 per discovered item (from `facts_slice.business_rules`,
   `facts_slice.trk_records`, …) following the `template.required_paragraphs`
   skeleton declared in the profile.
-- Co-author EN + every target language in the SAME LLM call. The non-EN drafts
-  MUST mirror the heading structure, table row count, and citation footnote ids
-  of EN 1:1 so the qa-reviewer can compare them.
+- Author exactly the requested languages in the SAME LLM call. When multiple
+  languages are requested, align heading structure, table row count, and citation
+  footnote ids 1:1 so the qa-reviewer can compare them.
 
 ### Per-file finalizer scope
 
@@ -130,7 +132,7 @@ The document MUST:
    `--kind functional-analysis` immediately. Fail-fast: do not start the next
    section while findings remain.
 6. **Report.** Print one summary line per language:
-   `OK: wrote docs/_shared/<file>/_fa-sections/en/<section_id>.md (words=…, sources=…)`
+   `OK: wrote docs/_shared/<file>/_fa-sections/<lang>/<section_id>.md (words=…, sources=…)`
    and the qa-reviewer verdict.
 
 ## Bundle Schema (per-section)
@@ -148,7 +150,7 @@ The document MUST:
   "section":          { /* the profile.sections[] entry (with _id_path / _parent_id) */ },
   "facts_slice":      { /* section-scoped subset of facts.json */ },
   "facts_slice_sha":  "<64-hex>",
-  "chunk_excerpt":    "…relevant heading-matched excerpt from docs/en/<file>/complete.md…",
+  "chunk_excerpt":    "…relevant heading-matched excerpt from bundle.languages[0]'s complete.md…",
   "chunk_excerpt_sha":"<64-hex>",
   "template_path":    "config/templates/docs/functional-analysis/default
   "template_snippet": "…the matching `## N. Title` block from template.<lang>.md…",
@@ -184,9 +186,10 @@ The document MUST:
     `template.md` at runtime — every bit of context lives in the bundle.
   - Never invent table rows, citations, or diagram nodes that have no anchor
     in `facts_slice` / `chunk_excerpt` / `diagrams`.
-- Non-EN drafts are co-authored in the SAME LLM call as EN. Post-hoc translation
+- All requested drafts are co-authored in the SAME LLM call. Post-hoc translation
   via a later `translator` fallback pass is permitted only to reconcile missing
-  or drifted siblings.
+  or drifted requested siblings when multiple languages are requested; never
+  generate an unrequested language as an intermediate.
 
 ## Resources
 
@@ -200,8 +203,11 @@ The document MUST:
 `config/pipeline-dag.yaml` phase G lists `functional-analysis-writer` twice:
 first at `per-section` scope (one LLM call per FA section), then at `per-file`
 scope (finalizer). Each call is followed by a `qa-reviewer` step with
-`kind: "functional-analysis"`. The phase depends on phase C so the writer can
-reuse the EN `complete.md` narrative when building per-section excerpts.
+`kind: "functional-analysis"`. Executable phase G requires F and the documentation
+prerequisites A/B/C/D/E. The writer reuses `bundle.languages[0]`'s `complete.md`
+narrative when building per-section excerpts. YAML selection of
+`output.generate.functional_analysis` also selects group K and its I/J context;
+disabling the requirements output does not remove these prerequisites.
 
 ## Common Pitfalls
 
@@ -215,5 +221,5 @@ reuse the EN `complete.md` narrative when building per-section excerpts.
   `N/A`, `TBD`, `???` as `error`.
 - **Diagram re-authoring.** Diagrams are embedded VERBATIM from the bundle.
   The qa-reviewer compares the inlined fence with the bundle source byte-for-byte.
-- **Co-authoring drift.** EN and IT drafts MUST share heading count, table row
+- **Co-authoring drift.** When multiple languages are requested, drafts MUST share heading count, table row
   count, and `[^src-N]` ids. The finalizer aborts on a structural diff.

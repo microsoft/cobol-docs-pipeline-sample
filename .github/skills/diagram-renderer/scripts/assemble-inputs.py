@@ -31,7 +31,7 @@ import yaml
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 DEFAULT_PROFILE = REPO_ROOT / "config" / "templates" / "docs" / "functional-analysis" / "default" / "profile.yaml"
 
 EXIT_OK = 0

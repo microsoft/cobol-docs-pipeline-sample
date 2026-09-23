@@ -8,7 +8,7 @@ Auto-detection rules (in evaluation order):
   4. `.cbl` / `.cob`                                  -> ate-org-interfaccia
   5. anything else                                    -> default
 
-The workspace-level `requirements_profile` in `config/sources.yaml`
+The workspace-level `requirements_profile` in `config/pipeline.yaml`
 is used as a fallback when auto-detection yields `default` and the user
 configured something more specific.
 
@@ -27,7 +27,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REQ_ROOT = REPO_ROOT / "config" / "templates" / "docs" / "requirements"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 # Sentinel value returned when the file should not get a requirements document.
 SKIP = "__skip__"

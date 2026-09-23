@@ -43,6 +43,7 @@ native_collect_inputs() {
   local files_name="$3"
   local paths_name="$4"
   local output_name="$5"
+  local exclude_default_extensions="${6:-true}"
   local -n files_ref="${files_name}"
   local -n paths_ref="${paths_name}"
   local -n output_ref="${output_name}"
@@ -87,11 +88,20 @@ PY
     for pattern in "${paths_ref[@]}"; do
       pattern="$(native_abspath "${_repo_root}" "${pattern}")"
       if [[ -d "${pattern}" ]]; then
-        while IFS= read -r -d '' match; do output_ref+=("${match}"); done \
+        while IFS= read -r -d '' match; do
+          if [[ "${exclude_default_extensions}" == true ]]; then
+            case "${match,,}" in *.cob|*.inp|*.itt) continue ;; esac
+          fi
+          output_ref+=("${match}")
+        done \
           < <(find "${pattern}" -type f -print0)
       else
         while IFS= read -r match; do
-          [[ -n "${match}" ]] && output_ref+=("${match}")
+          [[ -n "${match}" ]] || continue
+          if [[ "${exclude_default_extensions}" == true ]]; then
+            case "${match,,}" in *.cob|*.inp|*.itt) continue ;; esac
+          fi
+          output_ref+=("${match}")
         done < <(compgen -G "${pattern}" || true)
       fi
     done
@@ -101,9 +111,6 @@ PY
   local -a filtered=()
   for candidate in "${output_ref[@]}"; do
     candidate="$(native_abspath "${_repo_root}" "${candidate}")"
-    case "${candidate,,}" in
-      *.cob|*.inp|*.itt) continue ;;
-    esac
     if [[ -z "${seen[${candidate}]+x}" ]]; then
       seen["${candidate}"]=1
       filtered+=("${candidate}")

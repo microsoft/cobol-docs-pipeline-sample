@@ -13,8 +13,13 @@
 .PARAMETER Agent
   Copilot agent identifier. Default: section-doc-writer.
 
+.PARAMETER Languages
+  Comma-separated languages forwarded to section bundle staging. Default: en.
+  The pipeline supplies its resolved section languages when invoking this phase.
+
 .PARAMETER DocsThrottle
-  Parallel limit for the per-chunk dispatcher. Default: 10.
+  Parallel limit for the per-chunk dispatcher. Standalone default: 15.
+  Explicit values below 10 are honored; the public runner supplies its resolved limit.
 
 .PARAMETER DryRun
   Build dispatch commands without invoking the Copilot CLI.
@@ -40,6 +45,7 @@ param(
   [int]$Throttle = [Environment]::ProcessorCount,
   [string]$ResultsDir = 'temp',
   [string]$Agent = 'section-doc-writer',
+  [string]$Languages = 'en',
   [int]$DocsThrottle = 15,
   [bool]$TrackUsage = $true,
   [string]$OtelDir,
@@ -69,8 +75,10 @@ New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
 $resultsXml = Join-Path (Resolve-Path -LiteralPath $ResultsDir).Path 'copilot_doc_results.xml'
 $splat      = Add-SourceSelectorArgs -Target @{
                 Throttle      = $DocsThrottle
+                AllowLowerThrottle = $true
                 EnsureBundles = $true
                 Agent         = $Agent
+                Languages     = $Languages
                 ResultsXml    = $resultsXml
                 DryRun        = [bool]$DryRun
               } -Files $Files -Paths $Paths -Manifest $Manifest -SourceRoot $SourceRoot

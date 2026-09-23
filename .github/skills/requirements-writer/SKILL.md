@@ -1,7 +1,7 @@
 ---
 name: requirements-writer
 description: 'Author phase-F technical requirements for ONE mainframe or IBM i (AS400) COBOL source against the configured requirements profile. Reads one prepared bundle and writes per-language section drafts or final requirements.md. USE FOR: COBOL or ILE COBOL requirements, IBM i requirements, REQ/NFR blocks, phase F section authoring and finalization. DO NOT USE FOR: functional analysis, section docs, chunking, facts extraction, QA review, or portal build.'
-argument-hint: 'Per-section: --bundle <docs/_shared/<file>/_req-bundles/<section_id>.bundle.md>. Per-file finalizer: --bundle <docs/_shared/<file>/_req-bundles/_finalize.bundle.md>. Output paths live in the bundle Metadata + Output paths blocks. Always co-authors EN + every requested target language in one LLM call.'
+argument-hint: 'Per-section: --bundle <docs/_shared/<file>/_req-bundles/<section_id>.bundle.md>. Per-file finalizer: --bundle <docs/_shared/<file>/_req-bundles/_finalize.bundle.md>. Output paths live in the bundle Metadata + Output paths blocks. Authors exactly bundle.languages in one LLM call.'
 ---
 
 # Requirements Writer (per-section + per-file finalizer, phase F)
@@ -53,7 +53,9 @@ Do **not** use this skill for:
 
 ### Per-section scope
 
-For each language `<lang>` in `bundle.languages` (EN first, then every target):
+For exactly each language `<lang>` in `bundle.languages`, in its declared order,
+use `bundle.output_paths` verbatim. Never add an unrequested English edition or
+intermediate; English is the default only when no language is provided.
 
 ```
 docs/_shared/<file>/_req-sections/<lang>/<section_id>.md
@@ -92,8 +94,8 @@ The draft MUST:
   `profile.identifier_lock_regex` and be wrapped in backticks. Requirement ids
   follow `profile.functional_id_prefix` / `profile.non_functional_id_prefix`
   with `profile.id_padding` (e.g. `REQ-001`, `NFR-007`).
-- Co-author EN + every target language in the SAME LLM call. Non-EN drafts
-  MUST mirror EN structurally 1:1 (heading count, table row count,
+- Author exactly the requested languages in the SAME LLM call. When multiple
+  languages are requested, align structure 1:1 (heading count, table row count,
   `[^src-N]` ids, requirement ids).
 
 ### Per-file finalizer scope
@@ -138,7 +140,7 @@ The document MUST:
    `--kind requirements` immediately. Fail-fast: do not start the next section
    while findings remain.
 6. **Report.** Print one summary line per language:
-   `OK: wrote docs/_shared/<file>/_req-sections/en/<section_id>.md (words=…, sources=…)`
+   `OK: wrote docs/_shared/<file>/_req-sections/<lang>/<section_id>.md (words=…, sources=…)`
    and the qa-reviewer verdict.
 
 ## Bundle Schema (per-section)
@@ -156,7 +158,7 @@ The document MUST:
   "section":          { /* the profile.sections[] entry (with _id_path / _parent_id) */ },
   "facts_slice":      { /* section-scoped subset of facts.json */ },
   "facts_slice_sha":  "<64-hex>",
-  "chunk_excerpt":    "…relevant heading-matched excerpt from docs/en/<file>/complete.md…",
+  "chunk_excerpt":    "…relevant heading-matched excerpt from bundle.languages[0]'s complete.md…",
   "chunk_excerpt_sha":"<64-hex>",
   "template_path":    "config/templates/docs/requirements/ate-org-applicazione/template.md",
   "template_snippet": "…the matching `## N. Title` block from template.<lang>.md…",
@@ -185,7 +187,7 @@ The document MUST:
     `template.md` at runtime — every bit of context lives in the bundle.
   - Never invent table rows, citations, requirements, or diagram nodes that
     have no anchor in `facts_slice` / `chunk_excerpt` / `diagrams`.
-- Non-EN drafts are co-authored in the SAME LLM call as EN.
+- Drafts for all requested languages are co-authored in the SAME LLM call.
 
 ## Resources
 
@@ -200,7 +202,7 @@ The document MUST:
 `config/pipeline-dag.yaml` phase F lists `requirements-writer` twice: first at
 `per-section` scope, then at `per-file` scope (finalizer). Each call is followed
 by a `qa-reviewer` step with `kind: "requirements"`. The phase depends on
-phase C so the writer can reuse the EN `complete.md` narrative when building
+phase C so the writer can reuse `bundle.languages[0]`'s `complete.md` narrative when building
 per-section excerpts. Phase G (functional-analysis) depends on phase F.
 
 ## Common Pitfalls
@@ -214,5 +216,5 @@ per-section excerpts. Phase G (functional-analysis) depends on phase F.
   `stage-bundles.py --force` so the cached bundle `profile_sha` matches.
 - **Table fabrication.** Every row MUST cite a fact / line range. Empty cells
   use `_None._` italic; the qa-reviewer flags `N/A`, `TBD`, `???` as `error`.
-- **Co-authoring drift.** EN and IT drafts MUST share heading count, requirement
+- **Co-authoring drift.** When multiple languages are requested, drafts MUST share heading count, requirement
   ids, table row count, and `[^src-N]` ids.

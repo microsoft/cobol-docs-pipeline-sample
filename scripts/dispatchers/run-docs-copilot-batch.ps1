@@ -54,7 +54,8 @@
   CLI argument name used for prompt text. Default: --prompt.
 
 .PARAMETER AdditionalCopilotArgs
-  Additional args appended as-is to each Copilot CLI invocation.
+  Additional args appended as-is to each invocation. --model is rejected when
+  model selection already supplies a CLI model (runner override, config, or auto).
 
 .PARAMETER Throttle
   Max parallel chunk threads. Defaults to 12. Use `-Throttle <n>` to override
@@ -136,7 +137,7 @@
   Default: 1.
 
 .PARAMETER UsageLogPath
-  Optional usage log path. Defaults to `logs/copilot-usage.csv`.
+  Optional usage log path. Defaults to `temp/logs/copilot-usage.csv`.
   Supported formats: `.csv` (default) and `.jsonl`.
 
 .EXAMPLE
@@ -170,7 +171,7 @@ Read the bundle Markdown view at {bundlePath} as the single source of truth. It 
   [int]$Throttle = 12,
   [switch]$AllowLowerThrottle,
   [string]$ResultsXml = 'temp/copilot_doc_results.xml',
-  [string]$LogsDir = 'logs',
+  [string]$LogsDir = 'temp/logs',
   [string[]]$ExcludeExtensions = @('.cob', '.inp', '.itt'),
   [switch]$DryRun,
   [switch]$TaskLogging,
@@ -221,6 +222,9 @@ function Write-OrchLog {
 }
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
+. (Join-Path $repoRoot 'scripts\lib\Invoke-CopilotDispatch.ps1')
+$modelSelection = Resolve-CopilotModelSelection -RepoRoot $repoRoot -AgentName $Agent
+Assert-CopilotModelArguments -AdditionalCopilotArgs $AdditionalCopilotArgs -CliModel $modelSelection.cli_model
 $writeSectionsBatch = Join-Path $repoRoot '.github/skills/section-doc-writer/scripts/write_sections_batch.ps1'
 $sliceFactsBatch = Join-Path $repoRoot '.github/skills/facts-slicing/scripts/slice_facts_batch.ps1'
 if ($ensureFactsSlicesEnabled -and -not (Test-Path $sliceFactsBatch)) {
@@ -244,6 +248,13 @@ if (-not (Test-Path $resultsDir)) {
 $logsDir = if ([System.IO.Path]::IsPathRooted($LogsDir)) { $LogsDir } else { Join-Path $repoRoot $LogsDir }
 if (-not (Test-Path $logsDir)) {
   New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+}
+$tempRoot = Join-Path $repoRoot 'temp'
+$copilotLogDir = Join-Path $tempRoot 'copilot-cli-logs'
+foreach ($dir in @($tempRoot, $copilotLogDir)) {
+  if (-not (Test-Path -LiteralPath $dir)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  }
 }
 
 $resolvedTaskLogPath = if ($TaskLogPath) {
@@ -346,6 +357,10 @@ function Get-RecordedTaskStatus {
   if ([string]$Prev.bundle_sha -ne [string]$ExpectedBundleSha) {
     return 'stale'
   }
+  if ([string]$Prev.model -ne [string]$modelSelection.model -or
+      [string]$Prev.cli_model -ne [string]$modelSelection.cli_model -or $Prev.dry_run) {
+    return 'stale'
+  }
 
   if (-not (Test-BundleOutputsExist -BundlePath $BundlePath -RepoRoot $RepoRoot)) {
     return 'missing-output'
@@ -391,6 +406,8 @@ function Get-ParamsFingerprint {
     SourceRoot = [string]$SourceRoot
     Languages  = [string]$Languages
     Agent      = [string]$Agent
+    Model      = [string]$modelSelection.model
+    CliModel   = [string]$modelSelection.cli_model
   }
 }
 
@@ -404,7 +421,7 @@ function Read-Plan {
 function Test-ParamsMatch {
   param($PlanParams, $CurrentParams)
   if (-not $PlanParams) { return $false }
-  foreach ($k in @('Manifest', 'SourceRoot', 'Languages', 'Agent')) {
+  foreach ($k in @('Manifest', 'SourceRoot', 'Languages', 'Agent', 'Model', 'CliModel')) {
     if ([string]$PlanParams.$k -ne [string]$CurrentParams.$k) { return $false }
   }
   foreach ($k in @('Files', 'Paths')) {
@@ -494,6 +511,9 @@ function Write-Plan {
       chunk_id    = $w.ChunkId
       bundle_path = $w.BundlePath
       bundle_sha  = $w.BundleSha
+      model       = [string]$modelSelection.model
+      cli_model   = [string]$modelSelection.cli_model
+      model_source = [string]$modelSelection.source
       status      = $status
     }
   }
@@ -800,13 +820,13 @@ foreach ($entry in $sourceEntries) {
     $bundleSha = Get-BundleSha -Path $bundlePath
     if ($Resume -and -not $Force) {
       $prev = $script:StateMap[$bundlePath]
-      $outputsExist = Test-BundleOutputsExist -BundlePath $bundlePath -RepoRoot $repoRoot
-      if ($prev -and ([string]$prev.status -eq 'ok') -and ([string]$prev.bundle_sha -eq $bundleSha) -and $outputsExist) {
+      $recordedStatus = Get-RecordedTaskStatus -Prev $prev -ExpectedBundleSha $bundleSha -BundlePath $bundlePath -RepoRoot $repoRoot
+      if ($recordedStatus -eq 'ok') {
         Write-OrchLog ("SKIP chunk='{0}' bundle='{1}' reason=resume" -f $chunkId, $bundlePath) -NoHost
         continue
       }
-      if ($prev -and ([string]$prev.status -eq 'ok') -and ([string]$prev.bundle_sha -eq $bundleSha) -and -not $outputsExist) {
-        Write-OrchLog ("REQUEUE chunk='{0}' bundle='{1}' reason=missing-output" -f $chunkId, $bundlePath) -NoHost
+      if ($recordedStatus -in @('missing-output', 'stale')) {
+        Write-OrchLog ("REQUEUE chunk='{0}' bundle='{1}' reason={2}" -f $chunkId, $bundlePath, $recordedStatus) -NoHost
       }
     }
 
@@ -911,7 +931,7 @@ $resolvedUsageLogPath = if ($UsageLogPath) {
   if ([System.IO.Path]::IsPathRooted($UsageLogPath)) { $UsageLogPath } else { Join-Path $repoRoot $UsageLogPath }
 }
 else {
-  Join-Path $repoRoot 'logs/copilot-usage.csv'
+  Join-Path $logsDir 'copilot-usage.csv'
 }
 $usageLogIsCsv = ([System.IO.Path]::GetExtension($resolvedUsageLogPath).ToLowerInvariant() -eq '.csv')
 if ($trackUsage) {
@@ -920,9 +940,11 @@ if ($trackUsage) {
     New-Item -ItemType Directory -Path $usageLogDir -Force | Out-Null
   }
   if ($usageLogIsCsv -and -not (Test-Path -LiteralPath $resolvedUsageLogPath)) {
-    $usageCsvHeader = 'timestamp,task_id,source_name,source_path,chunk_id,exit,status,duration_ms,ai_credits,tokens_in,tokens_out,tokens_total,cost_usd,tool_calls,agent_turns,premium_requests,otel_path'
+    $usageCsvHeader = 'timestamp,task_id,source_name,source_path,chunk_id,exit,status,duration_ms,ai_credits,tokens_in,tokens_out,tokens_total,cost_usd,tool_calls,agent_turns,premium_requests,otel_path,model'
     [System.IO.File]::WriteAllText($resolvedUsageLogPath, $usageCsvHeader + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
   }
+  $usageCsvHasModel = $usageLogIsCsv -and (Test-Path -LiteralPath $resolvedUsageLogPath) -and
+    ((Get-Content -LiteralPath $resolvedUsageLogPath -TotalCount 1) -match ',model$')
 }
 Write-OrchLog "Usage detail log path=$resolvedUsageLogPath format=$(if($usageLogIsCsv){'csv'}else{'jsonl'})"
 
@@ -982,6 +1004,7 @@ $workerScript = {
       agent_turns     = 0
       premium_requests = 0.0
       otel_path       = $Path
+      model           = $selectedModel
     }
     if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $result }
     $lines = $null
@@ -1001,6 +1024,7 @@ $workerScript = {
     foreach ($line in $lines) {
       if (-not $line) { continue }
       try { $obj = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+      if ($obj.attributes.'gen_ai.response.model') { $result.model = [string]$obj.attributes.'gen_ai.response.model' }
       $name = [string]$obj.name
       $val  = 0.0
       foreach ($k in 'value','sum','count') {
@@ -1110,6 +1134,9 @@ $workerScript = {
       chunk_id     = $wi.ChunkId
       bundle_path  = $wi.BundlePath
       bundle_sha   = $wi.BundleSha
+      model        = $selectedModel
+      cli_model    = $cliModel
+      model_source = $modelSource
       exit         = $ExitCode
       status       = $status
       duration_ms  = $DurationMs
@@ -1146,6 +1173,7 @@ $workerScript = {
             $Usage.premium_requests
             $Usage.otel_path
           ) | ForEach-Object { & $csvEscape $_ }
+          if ($usageCsvHasModel) { $row += & $csvEscape $Usage.model }
           $usageLine = ($row -join ',') + [Environment]::NewLine
           [System.IO.File]::AppendAllText($usageLogFile, $usageLine, [System.Text.Encoding]::UTF8)
         }
@@ -1159,6 +1187,8 @@ $workerScript = {
             exit        = $ExitCode
             status      = $status
             duration_ms = $DurationMs
+            model       = $selectedModel
+            model_source = $modelSource
             usage       = $Usage
           } | ConvertTo-Json -Compress -Depth 6
           [System.IO.File]::AppendAllText($usageLogFile, $usagePayload + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
@@ -1182,10 +1212,16 @@ $workerScript = {
   }
   if ($copilotSub) { [void]$argv.Add($copilotSub) }
   [void]$argv.Add('--yolo')
+  [void]$argv.Add('--log-dir')
+  [void]$argv.Add($copilotLogDir)
   #[void]$argv.Add('--remote')
   if ($agentSwitch -and $agent) {
     [void]$argv.Add($agentSwitch)
     [void]$argv.Add($agent)
+  }
+  if ($cliModel) {
+    [void]$argv.Add('--model')
+    [void]$argv.Add($cliModel)
   }
   if ($promptSwitch) {
     [void]$argv.Add($promptSwitch)
@@ -1267,6 +1303,8 @@ $workerScript = {
     $psi.UseShellExecute        = $false
     $psi.CreateNoWindow         = $true
     $psi.WorkingDirectory       = $childCwd
+    $psi.EnvironmentVariables['TEMP'] = $tempRoot
+    $psi.EnvironmentVariables['TMP']  = $tempRoot
     if ($trackUsage -and $otelPath) {
       $psi.EnvironmentVariables['COPILOT_OTEL_ENABLED']            = 'true'
       $psi.EnvironmentVariables['COPILOT_OTEL_FILE_EXPORTER_PATH'] = $otelPath
@@ -1308,6 +1346,8 @@ $workerScript = {
     $errorText = if ($nativeExit -ne 0) { $combinedOutput } else { '' }
     $sw.Stop()
     $usage = & $parseUsage $otelPath $premiumMult
+    $cliUsage = ConvertFrom-CopilotUsage -Text $combinedOutput
+    if ($cliUsage.ModelUsed) { $usage.model = $cliUsage.ModelUsed }
     $fallback = & $parseCliUsage $combinedOutput $premiumMult
     if ($fallback.ai_credits -gt 0) {
       $usage.ai_credits = $fallback.ai_credits
@@ -1365,6 +1405,9 @@ $sharedState = @{
   copilotCli   = $CopilotCli
   copilotSub   = $CopilotSubcommand
   agent        = $Agent
+  selectedModel = [string]$modelSelection.model
+  cliModel     = [string]$modelSelection.cli_model
+  modelSource  = [string]$modelSelection.source
   agentSwitch  = $AgentSwitch
   promptSwitch = $PromptSwitch
   extra        = $AdditionalCopilotArgs
@@ -1378,16 +1421,21 @@ $sharedState = @{
   otelDir      = $otelDirResolved
   usageLogFile = $resolvedUsageLogPath
   usageLogIsCsv = [bool]$usageLogIsCsv
+  usageCsvHasModel = [bool]$usageCsvHasModel
   premiumMult  = [double]$premiumMultiplier
   copilotSrc   = $copilotSourcePath
   copilotPs1   = [bool]$copilotIsPs1
   pwshExe      = $pwshExePath
   pidSet       = $childPids
   childCwd     = $repoRoot
+  tempRoot     = $tempRoot
+  copilotLogDir = $copilotLogDir
 }
 
 # RunspacePool fan-out (PS5- and PS7-compatible substitute for `-Parallel`).
 $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault2()
+$iss.Commands.Add([System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
+  'ConvertFrom-CopilotUsage', ${function:ConvertFrom-CopilotUsage}.ToString()))
 foreach ($key in $sharedState.Keys) {
   $entry = New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry($key, $sharedState[$key], '')
   $iss.Variables.Add($entry)
@@ -1443,6 +1491,9 @@ try {
           chunk_id     = $wi.ChunkId
           bundle_path  = $wi.BundlePath
           bundle_sha   = $wi.BundleSha
+          model        = [string]$modelSelection.model
+          cli_model    = [string]$modelSelection.cli_model
+          model_source = [string]$modelSelection.source
           exit         = 1
           status       = 'failed'
           duration_ms  = 0

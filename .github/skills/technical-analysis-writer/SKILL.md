@@ -1,7 +1,7 @@
 ---
 name: technical-analysis-writer
 description: 'Author phase-L/M technical-analysis documents for mainframe or IBM i (AS400) sources and groups. LLM-driven, single-pass from the prepared finalize bundle, with deterministic DOCX export. USE FOR: IBM i or mainframe technical analysis, analisi tecnica, ATE, phase L per-file and phase M group finalization. DO NOT USE FOR: functional analysis, requirements, section docs, chunking, facts extraction, QA, or portal build.'
-argument-hint: 'Per-file: --source <path> (stages bundle, then dispatch reads docs/_shared/<file>/_ta-bundles/_finalize.bundle.md). Per-group: --group-id <id> (stages bundle, then dispatch reads docs/_shared/_groups/<id>/_ta-group-bundles/_finalize.bundle.md). Output paths live in the bundle Metadata + Output paths blocks. Always co-authors EN + every requested target language in one LLM call; DOCX is produced deterministically by the phase driver.'
+argument-hint: 'Per-file: --source <path> (stages bundle, then dispatch reads docs/_shared/<file>/_ta-bundles/_finalize.bundle.md). Per-group: --group-id <id> (stages bundle, then dispatch reads docs/_shared/_groups/<id>/_ta-group-bundles/_finalize.bundle.md). Output paths live in the bundle Metadata + Output paths blocks. Authors exactly bundle.languages in one LLM call; DOCX is produced deterministically by the phase driver.'
 ---
 
 # Technical Analysis Writer (per-file phase L + per-group phase M)
@@ -24,8 +24,8 @@ instead of stamping the not-applicable marker.
 
 | Scope               | Reads                                                                                | Writes                                                            |
 |---------------------|---------------------------------------------------------------------------------------|-------------------------------------------------------------------|
-| `per-file` (LLM)    | `docs/_shared/<file>/_ta-bundles/_finalize.bundle.md` (embeds `docs/en/<file>/complete.md`) | `docs/<lang>/<file>/technical-analysis.md` per language           |
-| `per-group` (LLM)   | `docs/_shared/_groups/<gid>/_ta-group-bundles/_finalize.bundle.md` (embeds `docs/en/_groups/<gid>/complete.md`) | `docs/<lang>/_groups/<gid>/technical-analysis.md` per language    |
+| `per-file` (LLM)    | `docs/_shared/<file>/_ta-bundles/_finalize.bundle.md` (embeds a requested language's `docs/<lang>/<file>/complete.md`) | `docs/<lang>/<file>/technical-analysis.md` per language           |
+| `per-group` (LLM)   | `docs/_shared/_groups/<gid>/_ta-group-bundles/_finalize.bundle.md` (embeds a requested language's `docs/<lang>/_groups/<gid>/complete.md`) | `docs/<lang>/_groups/<gid>/technical-analysis.md` per language    |
 
 Bundles are produced deterministically by
 [scripts/assemble-inputs.py](./scripts/assemble-inputs.py) (per-file) and
@@ -34,6 +34,10 @@ Bundles are produced deterministically by
 `technical-analysis-writer` agent. DOCX export is handled by the phase driver
 via [`scripts/lib/Convert-MdToDocx.ps1`](../../../scripts/lib/Convert-MdToDocx.ps1)
 (pandoc, plain default styling).
+
+For both scopes, the embedded source narrative comes from `bundle.languages[0]`,
+not from an implicit English edition. Author every requested output language
+from that staged narrative without requiring additional language intermediates.
 
 ## When to Use
 
@@ -69,11 +73,13 @@ from `config/templates/docs/technical-analysis/`:
 
 Group rule (`resolve_for_group`): any BMS member → `ate-org-applicazione`;
 any JCL/PRC member → `ate-org-interfaccia`; else → `default`. A workspace
-override key `technical_analysis_profile` in `sources.yaml` takes precedence.
+override key `technical_analysis_profile` in `pipeline.yaml` takes precedence.
 
 ## Output Contract
 
-For each language `<lang>` in `bundle.languages` (EN first, then every target):
+For exactly each language `<lang>` in `bundle.languages`, in its declared order,
+use `bundle.output_paths` verbatim. Never add an unrequested English edition or
+intermediate; English is the default only when no language is provided.
 
 ```
 docs/<lang>/<file>/technical-analysis.md                 # per-file (phase L)
@@ -101,16 +107,20 @@ Each `technical-analysis.md` MUST:
 - Per-group: member order MUST match `grouping.yaml` order verbatim.
 - Style COBOL/JCL identifiers per `profile.identifier_lock_regex`, wrapped in
   backticks.
-- Co-author EN + every target language in the SAME LLM call; non-EN editions
-  mirror EN structurally 1:1 (heading count, table row count, `[^src-N]` ids,
+- Author exactly the requested languages in the SAME LLM call; when multiple
+  languages are requested, align structure 1:1 (heading count, table row count, `[^src-N]` ids,
   front-matter keys).
 
 ## Pipeline wiring
 
 | Phase | Scope     | Runs in        | Depends on | Driver                                                     |
 |-------|-----------|----------------|------------|-------------------------------------------------------------|
-| **L** | per-file  | per-file-loop  | G          | [`scripts/phases/phase-L-technical-analysis.ps1`](../../../scripts/phases/phase-L-technical-analysis.ps1) |
+| **L** | per-file  | per-file-loop  | E          | [`scripts/phases/phase-L-technical-analysis.ps1`](../../../scripts/phases/phase-L-technical-analysis.ps1) |
 | **M** | per-group | workspace      | I, L       | [`scripts/phases/phase-M-group-technical-analysis.ps1`](../../../scripts/phases/phase-M-group-technical-analysis.ps1) |
+
+Technical analysis requires the complete documentation narrative, not requirements
+or functional analysis. YAML selection of `output.generate.technical_analysis`
+includes A/B/C/D/E/I/L/M/N; H is added only when `output.generate.docs` is enabled.
 
 Each phase runs three steps: **stage** (deterministic bundle packaging) →
 **dispatch** (Copilot CLI single-pass authoring) → **docx** (pandoc export).
@@ -151,8 +161,11 @@ Markdown editions remain the deliverable.
 
 ## Failure modes
 
-- **Missing prereq.** Per-file requires `docs/en/<file>/complete.md` (phase E);
-  per-group requires `docs/en/_groups/<gid>/complete.md` (phase I). The stager
+- **Missing prereq.** Per-file requires the first requested language's
+  `docs/<lang>/<file>/complete.md` (phase E); per-group requires
+  `docs/<lang>/_groups/<gid>/complete.md` (phase I), where `<lang>` is
+  `bundle.languages[0]`. English is not a prerequisite
+  unless requested. The stager
   exits 4 and the dispatch records `missing-bundle`.
 - **Copybook / BMS.** The stager writes `_skipped.json` and no ATE is produced.
 - **pandoc absent.** DOCX step is skipped; Markdown is complete.

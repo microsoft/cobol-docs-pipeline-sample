@@ -77,7 +77,7 @@ Slices are **read-only inputs** for downstream subagents — they never round-tr
 
 ## Procedure
 
-1. **Resolve inputs.** Locate the source file (same rules as upstream skills: relative to repo root, then to `source_root` from `config/sources.yaml`). Default `facts.json` and `chunk-manifest.json` live at `docs/_shared/<basename-with-ext>/`. Reject if either is missing. Accept `--facts <path>` to point directly at a facts file when the source itself is not available.
+1. **Resolve inputs.** Locate the source file (same rules as upstream skills: relative to repo root, then to `source_root` from `config/pipeline.yaml`). Default `facts.json` and `chunk-manifest.json` live at `docs/_shared/<basename-with-ext>/`. Reject if either is missing. Accept `--facts <path>` to point directly at a facts file when the source itself is not available.
 2. **Run the slicer.** Invoke [scripts/slice-facts.py](./scripts/slice-facts.py):
    ```powershell
    python .github/skills/facts-slicing/scripts/slice-facts.py `
@@ -87,7 +87,7 @@ Slices are **read-only inputs** for downstream subagents — they never round-tr
    - `--chunk-id <id>` — slice ONLY that chunk (must exist in the manifest); default is `--all`.
    - `--all` — slice every chunk in the manifest (default).
    - `--output-dir <path>` — override `docs/_shared/<basename-with-ext>/facts-slices`.
-   - `--source-root <root>` — override `sources.yaml::source_root`.
+   - `--source-root <root>` — override `pipeline.yaml::source_root`.
    - `--facts <path>` — override the default facts.json location.
    - `--manifest <path>` — override the default chunk-manifest.json location.
    - `--prune` — delete any pre-existing slice files in the output directory whose chunk id is NOT in the current manifest (default: keep stale files in place and warn).

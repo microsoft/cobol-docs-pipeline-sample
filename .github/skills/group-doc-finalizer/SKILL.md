@@ -22,7 +22,9 @@ argument-hint: <group_id> <bundle.bundle.md path> [target_languages]
 # Scope
 
 This skill owns the phase-I per-group LLM authoring step. One invocation
-covers EN plus every requested translation language for a single group.
+covers exactly `bundle.languages` in declared order at `bundle.output_paths`
+for a single group. Never add an unrequested English edition or intermediate.
+Structural parity applies only when multiple languages are requested.
 
 Sibling skills it does NOT replace:
 - `section-doc-finalizer` — per-file `index.md` + `complete.md` (phase E).
@@ -34,10 +36,10 @@ Sibling skills it does NOT replace:
 - `config/grouping.yaml` — group manifest (members, description).
 - `docs/_shared/<member>/chunk-manifest.json` — for each member.
 - `docs/_shared/<member>/facts.json` — TOC fields + `incoming_xref[]`.
-- `docs/en/<member>/index.md` and `docs/en/<member>/complete.md` — the
-  per-file deliverables produced by phase E.
-- `docs/<target_language>/<member>/{index,complete}.md` — translated
-  members when a non-EN target language is requested.
+- `docs/<lang>/<member>/{index,complete}.md` — the per-file deliverables
+  produced by phase E in the first requested language (`bundle.languages[0]`).
+  The stager requires these member inputs and embeds their excerpts as the
+  source narrative for all requested output editions.
 
 All of the above are projected into the bundle by
 `scripts/assemble-inputs.py` so the LLM reads exactly one
@@ -47,9 +49,7 @@ All of the above are projected into the bundle by
 
 - `docs/_shared/_groups/<group_id>/_doc-bundles/_finalize.bundle.json`
 - `docs/_shared/_groups/<group_id>/_doc-bundles/_finalize.bundle.md`
-- `docs/en/_groups/<group_id>/index.md`
-- `docs/en/_groups/<group_id>/complete.md`
-- `docs/<target_language>/_groups/<group_id>/{index,complete}.md`
+- `docs/<lang>/_groups/<group_id>/{index,complete}.md` for each requested language only.
 
 # Procedure (planned)
 

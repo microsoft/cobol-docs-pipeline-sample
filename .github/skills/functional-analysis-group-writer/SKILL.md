@@ -26,8 +26,10 @@ argument-hint: <group_id> <bundle.bundle.md path> [target_languages]
 # Scope
 
 Owns phase-K authoring at the group level. One invocation per section
-(per-section scope) or per group (finalizer scope), each covering EN
-plus every requested translation language.
+(per-section scope) or per group (finalizer scope), each covering exactly
+`bundle.languages` in declared order at `bundle.output_paths`. Never add an
+unrequested English edition or intermediate. Structural parity applies only
+when multiple languages are requested.
 
 Sibling skills:
 - `functional-analysis-writer` — per-file AFU (phase G).
@@ -47,6 +49,8 @@ Per-group finalizer scope:
 
 Bundles aggregate, per group:
 - Each member's `docs/<lang>/<member>/functional-analysis.md` excerpts (phase G).
+- Member narrative inputs and bundle excerpts use `<lang> = bundle.languages[0]`;
+  do not require an English intermediate or member inputs in every output language.
 - The group's `docs/<lang>/_groups/<group_id>/requirements.md` excerpts (phase J)
   so AFU sections can cite group ATE requirement ids `GRP-<group_id>-REQ-NNN`.
 - `config/grouping.yaml` description + member list.
@@ -54,10 +58,10 @@ Bundles aggregate, per group:
 
 # Outputs
 
-- `docs/_shared/_groups/<group_id>/_fa-group-sections/en/<section_id>.md`
-- `docs/_shared/_groups/<group_id>/_fa-group-sections/<target_language>/<section_id>.md`
-- `docs/en/_groups/<group_id>/functional-analysis.md`
-- `docs/<target_language>/_groups/<group_id>/functional-analysis.md`
+- `docs/_shared/_groups/<group_id>/_fa-group-sections/<lang>/<section_id>.md`
+- `docs/<lang>/_groups/<group_id>/functional-analysis.md`
+
+Write only the languages and paths declared in the bundle.
 
 # Determinism rules
 

@@ -22,7 +22,7 @@ import yaml
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 DOC_ROOT = REPO_ROOT / "docs" / "_shared"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
@@ -69,10 +69,7 @@ def resolve_source(source: str, source_root: Path) -> Path:
 
 def parse_languages(value: str) -> list[str]:
     parts = [p.strip().lower() for p in (value or "en").split(",") if p.strip()]
-    if "en" in parts:
-        rest = [p for p in parts if p != "en"]
-        return ["en", *rest]
-    return ["en", *parts]
+    return list(dict.fromkeys(parts))
 
 
 def rel(p: Path) -> str:
@@ -195,7 +192,13 @@ def main() -> int:
     if resolution.skipped:
         print(f"SKIP: {source_path.name}: {resolution.reason}")
         return EXIT_OK
-    assert resolution.profile_dir is not None
+    if resolution.profile_dir is None:
+        print(
+            f"ERROR: functional-analysis profile '{resolution.profile}' is not available under "
+            f"{fpr.FA_ROOT} ({resolution.reason})",
+            file=sys.stderr,
+        )
+        return EXIT_MISSING_PREREQ
     profile_yaml_path = resolution.profile_dir / "profile.yaml"
     profile_bytes = profile_yaml_path.read_bytes()
     profile = yaml.safe_load(profile_bytes.decode("utf-8")) or {}

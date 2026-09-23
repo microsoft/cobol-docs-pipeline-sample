@@ -47,7 +47,8 @@ if (-not (Test-Path -LiteralPath $readerScript)) {
 }
 $groupsJson = & python $readerScript $manifestPath
 if ($LASTEXITCODE -ne 0) { throw "Failed to read group ids from $manifestPath" }
-$groups = @($groupsJson | ConvertFrom-Json)
+$parsedGroups = ConvertFrom-Json -InputObject ($groupsJson -join [Environment]::NewLine)
+$groups = @($parsedGroups)
 
 if ($groups.Count -eq 0) {
   Write-Host 'req_group_stage_batch: no groups declared in grouping.yaml — no-op.'

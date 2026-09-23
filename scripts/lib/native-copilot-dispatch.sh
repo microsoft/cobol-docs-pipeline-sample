@@ -63,6 +63,24 @@ case "${mode}" in
   *) printf 'ERROR: unknown dispatcher mode: %s\n' "${mode}" >&2; exit 2 ;;
 esac
 
+model_args=(--config "${repo_root}/config/pipeline.yaml"
+  --agent-file "${repo_root}/.github/agents/${agent}.agent.md" --format lines)
+[[ -n "${COBOL_DOCS_COPILOT_MODEL:-}" ]] && model_args+=("--model=${COBOL_DOCS_COPILOT_MODEL}")
+model_output="$("$(native_python)" "${repo_root}/scripts/tools/resolve-copilot-model.py" "${model_args[@]}")"
+model_output="${model_output//$'\r'/}"
+mapfile -t model_selection <<<"${model_output}"
+selected_model="${model_selection[0]}"
+model_source="${model_selection[1]}"
+cli_model="${model_selection[2]:-}"
+if [[ -n "${cli_model}" ]]; then
+  for arg in "${additional_args[@]}"; do
+    if [[ "${arg}" == --model || "${arg}" == --model=* ]]; then
+      printf 'ERROR: use -CopilotModel on the pipeline runner or copilot.default_model, not AdditionalCopilotArgs --model.\n' >&2
+      exit 2
+    fi
+  done
+fi
+
 results_xml="$(native_abspath "${repo_root}" "${results_xml}")"
 state_path="$(native_abspath "${repo_root}" "${state_path:-logs/${mode}_state.jsonl}")"
 plan_path="$(native_abspath "${repo_root}" "${plan_path:-logs/${mode}_plan.json}")"
@@ -117,27 +135,29 @@ if ((${#bundles[@]} == 0)); then
   exit 4
 fi
 
-"$(native_python)" - "${plan_path}" "${mode}" "${agent}" "${bundles[@]}" <<'PY'
+"$(native_python)" - "${plan_path}" "${mode}" "${agent}" "${selected_model}" "${bundles[@]}" <<'PY'
 import json
 import pathlib
 import sys
-path, mode, agent, *bundles = sys.argv[1:]
-pathlib.Path(path).write_text(json.dumps({"mode": mode, "agent": agent, "bundles": bundles}, indent=2), encoding="utf-8")
+path, mode, agent, model, *bundles = sys.argv[1:]
+pathlib.Path(path).write_text(json.dumps({"mode": mode, "agent": agent, "model": model, "bundles": bundles}, indent=2), encoding="utf-8")
 PY
 
 run_copilot_bundle() {
   local bundle="$1" bundle_view prompt attempt exit_code output
+  local -a args=()
   bundle_view="${bundle%.json}.md"
   [[ -f "${bundle_view}" ]] || bundle_view="${bundle}"
   prompt="Read ${bundle_view} as the authoritative prepared input and write every output requested by its metadata. Follow the referenced template and active profile exactly."
+  [[ -n "${copilot_subcommand}" ]] && args+=("${copilot_subcommand}")
+  args+=("${agent_switch}" "${agent}" "${prompt_switch}" "${prompt}" "${additional_args[@]}")
+  [[ -n "${cli_model}" ]] && args+=(--model "${cli_model}")
   if ${dry_run}; then
-    printf 'DRY-RUN: %q %q %q %q %q\n' "${copilot_cli}" "${copilot_subcommand}" "${agent_switch}" "${agent}" "${prompt}"
+    printf 'DRY-RUN: %q ' "${copilot_cli}" "${args[@]}"
+    printf '\n'
     return 0
   fi
   command -v "${copilot_cli}" >/dev/null 2>&1 || { printf 'ERROR: Copilot CLI not found: %s\n' "${copilot_cli}" >&2; return 127; }
-  args=()
-  [[ -n "${copilot_subcommand}" ]] && args+=("${copilot_subcommand}")
-  args+=("${agent_switch}" "${agent}" "${prompt_switch}" "${prompt}" "${additional_args[@]}")
   attempt=0
   while true; do
     set +e
@@ -153,18 +173,19 @@ run_copilot_bundle() {
     attempt=$((attempt + 1))
     printf 'Retrying %s (%d/%d).\n' "${bundle}" "${attempt}" "${max_retries}" >&2
   done
-  "$(native_python)" - "${state_path}" "${bundle}" <<'PY'
+  "$(native_python)" - "${state_path}" "${bundle}" "${selected_model}" <<'PY'
 import datetime
 import json
 import pathlib
 import sys
 with pathlib.Path(sys.argv[1]).open("a", encoding="utf-8") as stream:
-    stream.write(json.dumps({"bundle_path": sys.argv[2], "status": "ok", "completed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}) + "\n")
+    stream.write(json.dumps({"bundle_path": sys.argv[2], "model": sys.argv[3], "status": "ok", "completed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}) + "\n")
 PY
 }
-export dry_run copilot_cli copilot_subcommand agent_switch agent prompt_switch timeout_sec max_retries state_path
+export dry_run copilot_cli copilot_subcommand agent_switch agent prompt_switch timeout_sec max_retries state_path cli_model selected_model
 export -a additional_args 2>/dev/null || true
 export -f run_copilot_bundle
 printf 'Dispatching %d %s bundle(s) with agent=%s throttle=%s dry_run=%s\n' \
   "${#bundles[@]}" "${mode}" "${agent}" "${throttle}" "${dry_run}"
+printf 'Model: %s (%s)\n' "${selected_model}" "${model_source}"
 native_run_python_batch "${throttle}" "${results_xml}" run_copilot_bundle bundles

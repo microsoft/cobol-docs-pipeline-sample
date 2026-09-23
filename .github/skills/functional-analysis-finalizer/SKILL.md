@@ -8,9 +8,9 @@ argument-hint: 'Source file path + optional --languages en,it. Writes docs/<lang
 
 LLM-driven phase-G finalizer. For ONE source file, stitches the per-FA-section
 drafts written by [`functional-analysis-writer`](../functional-analysis-writer/SKILL.md)
-into a single, complete `functional-analysis.md` per requested language. EN is
-the source-of-truth; non-EN siblings are co-authored / co-finalised in the same
-LLM call.
+into a single, complete `functional-analysis.md` for exactly `bundle.languages`,
+in declared order at `bundle.output_paths`, co-finalised in the same LLM call.
+Never require or create an unrequested English edition or intermediate.
 
 This is the **per-file scope** of the FA family. The per-section
 `functional-analysis-writer` skill explicitly **forbids** authoring the final
@@ -57,8 +57,8 @@ The document MUST:
   re-sequenced starting at 1 in document order.
 - Append the footer from `profile.footer` verbatim when present
   (`V5.0.0` + `<!-- kpi-functional-analysis -->` for `default
-- For non-EN languages, mirror the EN heading structure, table row count, and
-  consolidated footnote ids 1:1.
+- When multiple languages are requested, align heading structure, table row count,
+  and consolidated footnote ids 1:1 across those languages only.
 
 ## Procedure
 

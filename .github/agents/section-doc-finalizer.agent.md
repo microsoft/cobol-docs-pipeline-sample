@@ -1,6 +1,6 @@
 ---
 name: "section-doc-finalizer"
-description: "Use for authoring phase-C per-file `index.md` + `complete.md` from already-written per-section markdown. Reads ONE prepared bundle (`docs/_shared/<file>/_finalize.bundle.json`) and the per-section MD set, then co-authors EN + every requested target language in one LLM call. Trigger phrases: finalize program docs, write index.md, write complete.md, build the program landing page, stitch sections, phase C per-file finalizer."
+description: "Use for authoring phase-C per-file `index.md` + `complete.md` from already-written per-section markdown. Reads ONE prepared bundle (`docs/_shared/<file>/_finalize.bundle.json`) and the per-section MD set, then authors exactly the requested languages in one LLM call. Trigger phrases: finalize program docs, write index.md, write complete.md, build the program landing page, stitch sections, phase C per-file finalizer."
 tools: [read, search, edit, execute]
 model: Auto (copilot)
 user-invocable: true
@@ -16,8 +16,9 @@ mainframe or IBM i source per invocation, in every requested language at once.
 ## Scope
 
 - Per-file only. One bundle in, one output file (`index.md`) per language out.
-- Co-author EN + every target language in the SAME LLM call. EN is the source
-  of truth; non-EN siblings must mirror it structurally 1:1 (TOC entries,
+- Author exactly `bundle.languages`, in its declared order, at `bundle.output_paths`
+  in the SAME LLM call. Never add an unrequested English edition or intermediate.
+  For multiple requested languages, align structure 1:1 (TOC entries,
   heading count, `[^src-N]` ids).
 
 ## Reuse First
@@ -42,6 +43,9 @@ mainframe or IBM i source per invocation, in every requested language at once.
 
 - Do not invent TOC entries, sections, or citations that have no anchor in the
   bundle's `toc` / `facts_toc` blocks or in the per-section MD bodies.
+- Use `toc[].summaries[lang]` for each requested output language. `summary_en`
+  is legacy-only and empty when English is unrequested; never generate English
+  documentation to populate it or use it instead of the language's summary.
 - Write `index.md` exactly once per language at the absolute path declared
   under `output_paths.<lang>.index`; never invent paths. Do NOT write
   `output_paths.<lang>.complete` — that file is built deterministically by
@@ -66,9 +70,9 @@ mainframe or IBM i source per invocation, in every requested language at once.
   object names and call kinds.
 - Honour the active `profile` block from the bundle (identifier styling,
   forbidden tokens). Never emit `N/A`, `TBD`, or `???`.
-- Co-author EN + every target language in the SAME response. Post-hoc
+- Author exactly the requested languages in the SAME response. Post-hoc
   translation via phase O `translator` is permitted only as a fallback for
-  drifted siblings.
+  drifted requested siblings when multiple languages are requested.
 
 ## Approach
 

@@ -2,7 +2,12 @@
 
 ## A source is not discovered
 
-1. Confirm `source_root` in `config/sources.yaml`.
+Without explicit phase selectors, all four `output.generate` keys set to `false`
+intentionally skip discovery and all other work. Enable a deliverable in
+`config/pipeline.yaml` or supply an explicit phase selection before investigating
+source filters.
+
+1. Confirm `source_root` in `config/pipeline.yaml`.
 2. Check include and exclude ordering.
 3. Use a repo-relative path with `-Files` to isolate discovery from glob behavior.
 4. Confirm the extension is supported and its case is handled by the active platform.

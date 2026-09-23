@@ -59,7 +59,7 @@ Alongside the per-chunk files, a single index is emitted at `docs/_shared/<basen
 
 ## Procedure
 
-1. **Resolve inputs.** Locate the source file (same rules as upstream skills: relative to repo root first, then to `source_root` from `config/sources.yaml`). Default manifest is at `docs/_shared/<basename-with-ext>/chunk-manifest.json`. Reject if either is missing.
+1. **Resolve inputs.** Locate the source file (same rules as upstream skills: relative to repo root first, then to `source_root` from `config/pipeline.yaml`). Default manifest is at `docs/_shared/<basename-with-ext>/chunk-manifest.json`. Reject if either is missing.
 2. **Stale-input check.** Hash the source bytes on disk and compare with `chunk-manifest.json::sha256`. On mismatch: exit code `4`, error on stderr, **no `.txt` written**. Re-run `cobol-chunking` first.
 3. **Run the extractor.** Invoke [scripts/extract-chunks.py](./scripts/extract-chunks.py):
    ```powershell
@@ -69,7 +69,7 @@ Alongside the per-chunk files, a single index is emitted at `docs/_shared/<basen
    Flags:
    - `--chunk-id <id>` — extract ONLY that chunk (must exist in the manifest); default is all chunks.
    - `--output-dir <path>` — override `docs/_shared/<basename-with-ext>/chunks`.
-   - `--source-root <root>` — override `sources.yaml::source_root`.
+   - `--source-root <root>` — override `pipeline.yaml::source_root`.
    - `--manifest <path>` — override the default chunk-manifest location.
    - `--prune` — delete any pre-existing `.txt` in the output directory whose chunk id is NOT in the current manifest (default: keep stale files and warn).
    - `--no-index` — skip writing `index.json` (useful when extracting a single chunk on demand).

@@ -17,7 +17,7 @@
   (`default`, `ate-org-applicazione`, `ate-org-interfaccia`) and
   writes `docs/<lang>/<file>/requirements.md` per requested language.
 
-  Prereqs per source: docs/en/<basename>/complete.md (phase-E output).
+  Prereqs per source: docs/<first-language>/<basename>/complete.md (phase-E output).
   On a missing prereq, exits with code 4.
 
 .PARAMETER Languages
@@ -101,8 +101,9 @@ if ($prcSources.Count -gt 0) {
   $Manifest = $null
 }
 
+$primaryLanguage = ($Languages -split ',')[0].Trim().ToLowerInvariant()
 Assert-PhasePrereqs -RepoRoot $repoRoot -Sources $sources -PhaseId F `
-  -RequiredArtifacts @('docs/en/<basename>/complete.md')
+  -RequiredArtifacts @("docs/$primaryLanguage/<basename>/complete.md")
 
 New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
 $resultsDirFull = (Resolve-Path -LiteralPath $ResultsDir).Path

@@ -12,11 +12,11 @@
     L.3  scripts/lib/Convert-MdToDocx.ps1 (pandoc, plain default styling)
 
   Single-pass: the consolidated narrative source is the per-file
-  docs/en/<basename>/complete.md (phase-E output), reorganized into the
+  docs/<first-language>/<basename>/complete.md (phase-E output), reorganized into the
   resolved technical-analysis profile/template structure. Copybooks/BMS
   are tombstoned by the stager and skipped.
 
-  Prereqs per source: docs/en/<basename>/complete.md. On a missing prereq,
+  Prereqs per source: docs/<first-language>/<basename>/complete.md. On a missing prereq,
   exits with code 4.
 
 .PARAMETER Languages
@@ -76,8 +76,9 @@ if (-not $Files -and -not $Paths -and -not $Manifest) {
 }
 
 $sources = Get-PhaseInputs -Files $Files -Paths $Paths -Manifest $Manifest
+$primaryLanguage = ($Languages -split ',')[0].Trim().ToLowerInvariant()
 Assert-PhasePrereqs -RepoRoot $repoRoot -Sources $sources -PhaseId L `
-  -RequiredArtifacts @('docs/en/<basename>/complete.md')
+  -RequiredArtifacts @("docs/$primaryLanguage/<basename>/complete.md")
 
 New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
 $resultsDirFull = (Resolve-Path -LiteralPath $ResultsDir).Path

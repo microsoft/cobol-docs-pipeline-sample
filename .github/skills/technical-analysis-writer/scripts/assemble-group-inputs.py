@@ -3,8 +3,8 @@
 
 SIMPLE single-pass finalizer input for ONE group declared in
 `config/grouping.yaml`. Loads:
-  - the EN group consolidated documentation
-    `docs/en/_groups/<group_id>/complete.md` (phase-I output; the SINGLE
+  - the first requested language's group consolidated documentation
+    `docs/<lang>/_groups/<group_id>/complete.md` (phase-I output; the SINGLE
     narrative source the writer draws from),
   - the resolved technical-analysis profile (group auto-detect rule) +
     per-language template,
@@ -40,8 +40,7 @@ def sha256_bytes(data: bytes) -> str:
 
 def parse_languages(value: str) -> list[str]:
     parts = [p.strip().lower() for p in (value or "en").split(",") if p.strip()]
-    rest = [p for p in parts if p != "en"]
-    return ["en", *rest]
+    return list(dict.fromkeys(parts))
 
 
 def rel(p: Path) -> str:
@@ -56,11 +55,11 @@ def load_group(manifest: Path, group_id: str) -> dict:
     raise SystemExit(f"ERROR: group '{group_id}' not found in {manifest}")
 
 
-def synthesize_group_complete(group_id: str, members: list[str]) -> str:
+def synthesize_group_complete(group_id: str, members: list[str], language: str = "en") -> str:
     parts: list[str] = []
     for member in members:
         base = Path(member).name
-        md_path = REPO_ROOT / "docs" / "en" / base / "complete.md"
+        md_path = REPO_ROOT / "docs" / language / base / "complete.md"
         if not md_path.exists():
             continue
         text = md_path.read_text(encoding="utf-8", errors="replace").strip()
@@ -75,7 +74,7 @@ def synthesize_group_complete(group_id: str, members: list[str]) -> str:
 
     header = (
         f"# {group_id} — Group Complete (auto-generated fallback)\n\n"
-        "This document was auto-generated because docs/en/_groups/<group_id>/complete.md was missing. "
+        f"This document was auto-generated because docs/{language}/_groups/{group_id}/complete.md was missing. "
         "It is composed from available per-member complete.md files in group order.\n"
     )
     return header + "\n".join(parts).strip() + "\n"
@@ -152,7 +151,7 @@ def render_md_view(bundle: dict) -> str:
         out.append((tpl or "").rstrip())
         out.append("```")
         out.append("")
-    out.append("## Narrative source — EN group complete.md")
+    out.append(f"## Narrative source — {bundle['languages'][0]} group complete.md")
     out.append("")
     out.append("```markdown")
     out.append((bundle.get("complete_md") or "").rstrip())
@@ -205,10 +204,10 @@ def main() -> int:
         )
         return EXIT_MISSING_PREREQ
 
-    # Phase-I prerequisite: the EN group consolidated doc.
-    complete_md_path = REPO_ROOT / "docs" / "en" / "_groups" / args.group_id / "complete.md"
+    languages = parse_languages(args.languages)
+    complete_md_path = REPO_ROOT / "docs" / languages[0] / "_groups" / args.group_id / "complete.md"
     if not complete_md_path.exists():
-        complete_md = synthesize_group_complete(args.group_id, members)
+        complete_md = synthesize_group_complete(args.group_id, members, languages[0])
         complete_md_path.parent.mkdir(parents=True, exist_ok=True)
         complete_md_path.write_text(complete_md, encoding="utf-8")
         print(
@@ -222,7 +221,6 @@ def main() -> int:
     profile_bytes = profile_yaml_path.read_bytes()
     profile = yaml.safe_load(profile_bytes.decode("utf-8")) or {}
 
-    languages = parse_languages(args.languages)
     templates_by_lang = tpr.template_paths(resolution.profile_dir, languages)
     templates = {lang: p.read_text(encoding="utf-8", errors="replace") for lang, p in templates_by_lang.items()}
 

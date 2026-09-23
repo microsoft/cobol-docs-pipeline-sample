@@ -1,14 +1,61 @@
 # Run the pipeline
 
-## Select inputs
+## Simplest execution
 
-Use exactly one selector family for a run.
+Set `source_root`, `include`, `exclude`, and `output.generate` in
+`config/pipeline.yaml`, then run:
 
-| Selector | Use case |
-|----------|----------|
-| `-Files` | Explicit source files |
-| `-Paths` | Directories or glob patterns |
-| `-Manifest` | JSON or CSV inventory containing a path field |
+=== "PowerShell"
+
+    ```powershell
+    pwsh -NoProfile -File scripts/run-pipeline.ps1
+    ```
+
+=== "Bash"
+
+    ```bash
+    bash scripts/run-pipeline.sh
+    ```
+
+This selects the configured deliverables and their prerequisites, then scans the
+configured root recursively using the include/exclude globs. All four
+`output.generate` values default to `true` when omitted. If all are `false`,
+the run does no work, including no source discovery or portal build.
+
+## Run against another source folder
+
+For a temporary root override, one parameter is enough:
+
+=== "PowerShell"
+
+    ```powershell
+    pwsh -NoProfile -File scripts/run-pipeline.ps1 `
+      -SourceRoot 'D:\Customers\Acme\legacy-sources'
+    ```
+
+=== "Bash / WSL"
+
+    ```bash
+    bash scripts/run-pipeline.sh \
+      -SourceRoot '/mnt/d/Customers/Acme/legacy-sources'
+    ```
+
+The override still uses `include` and `exclude` from `config/pipeline.yaml`.
+
+## Run selected folders
+
+Pass directories directly to `-Paths`; every directory is scanned recursively:
+
+```powershell
+$sourceRoot = 'D:\Customers\Acme\legacy-sources'
+$folders = @(
+  "$sourceRoot\Accounting"
+  "$sourceRoot\Payments"
+)
+& scripts/run-pipeline.ps1 -Paths $folders -SourceRoot $sourceRoot
+```
+
+Use `-Files` for explicit files and `-Manifest` for an exact JSON/CSV inventory.
 
 ## Select phases
 
@@ -18,8 +65,22 @@ Use exactly one selector family for a run.
 | `-From`, `-To` | `-From A -To C` | Run an inclusive range |
 | `-Skip` | `-Skip I,J,K,M,N` | Remove phases from the selected set |
 
-When `-Phases` is supplied, it takes precedence and `-From`, `-To`, and `-Skip` are ignored. The
-runner restores dependency order even when an explicit phase list is written in another order.
+With no explicit phase selectors, both public runners use `output.generate`:
+`docs` selects D/E/H/I plus A/B/C; `requirements` selects F/J plus A/B/C/D/E/I;
+`functional_analysis` selects G/K plus A/B/C/D/E/F/I/J; `technical_analysis`
+selects L/M plus A/B/C/D/E/I, without requirements or FA. Enabled outputs are
+combined and add portal N. H is included only for `docs: true` in this mode.
+
+An explicitly supplied `-Phases`, `-From`, or `-To` bypasses this YAML selection
+and does not auto-add prerequisites. `-Phases` takes precedence over `-From` and
+`-To`; the selected phases run in pipeline order. Legacy `Run*` false toggles and
+`-Skip` are applied last, including with `-Phases`, and removed prerequisites
+are not repaired. Supply missing prerequisites yourself or reuse existing artifacts.
+
+Each YAML key selects both file and group outputs. Disabled types can still be
+generated as prerequisites. Existing output is not deleted, so the portal may
+show older documents. See [configuration](configuration.md#select-generated-deliverables)
+for the complete contract, shared by PowerShell and Bash.
 
 Common selections:
 

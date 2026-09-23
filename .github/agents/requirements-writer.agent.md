@@ -15,9 +15,10 @@ bundle's `scope` field tells you which.
 - `per-section` — author ONE requirements section draft per language for ONE source file.
 - `per-file`    — stitch the per-section drafts into ONE `requirements.md` per language.
 
-Both scopes co-author EN + every target language in the SAME LLM call. EN is
-the source of truth; the non-EN drafts must mirror it structurally 1:1
-(heading count, requirement ids, table row count, `[^src-N]` ids).
+Both scopes author exactly `bundle.languages`, in its declared order, at
+`bundle.output_paths` in the SAME LLM call. Never add an unrequested English
+edition or intermediate. When multiple languages are requested, keep their
+structure aligned 1:1 (heading count, requirement ids, table row count, `[^src-N]` ids).
 
 ## Reuse First
 
@@ -124,7 +125,7 @@ or the finalizer's `assemble-inputs.py`).
   preview the plan, do not ask questions, do not request confirmation.
 - Do not read `facts.json`, `complete.md`, `profile.yaml`, or the full
   `template.md` at runtime — the bundle MD already embeds everything needed.
-- Co-author EN + every target language in the SAME response.
+- Author exactly the requested languages in the SAME response.
 - When done, the writer must print ONE short final line of the form
   `DONE section=<id> files=<N> langs=<csv>` (per-section) or
   `DONE file=<basename> files=<N> langs=<csv>` (per-file) and stop. No summary,

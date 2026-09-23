@@ -21,6 +21,12 @@ function Invoke-PythonBatch {
     [int]$Throttle = [Environment]::ProcessorCount
   )
 
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+  $batchTempDir = Join-Path $repoRoot 'temp/python-batch'
+  if (-not (Test-Path -LiteralPath $batchTempDir)) {
+    New-Item -ItemType Directory -Path $batchTempDir -Force | Out-Null
+  }
+
   if (-not $BuildResult) {
     $BuildResult = {
       param($entry, $exitCode, $stdout, $stderr)
@@ -43,8 +49,8 @@ function Invoke-PythonBatch {
     $buildArgs   = [scriptblock]::Create($buildArgsText)
     $buildResult = [scriptblock]::Create($buildResultText)
     $argv = @(& $buildArgs $entry)
-    $errFile = New-TemporaryFile
-    $outFile = New-TemporaryFile
+    $errFile = New-Item -ItemType File -Path (Join-Path $batchTempDir ([System.IO.Path]::GetRandomFileName()))
+    $outFile = New-Item -ItemType File -Path (Join-Path $batchTempDir ([System.IO.Path]::GetRandomFileName()))
     try {
       # Invoke via the call operator + splatting instead of
       # `Start-Process -ArgumentList`. Under Windows PowerShell 5.1,
@@ -53,6 +59,7 @@ function Invoke-PythonBatch {
       # "Cannot convert '<value>' to the type 'System.String' required by
       # parameter 'ArgumentList'". `& python @argv` passes each element as a
       # discrete native argument correctly under both PS 5.1 and PS 7.
+      $env:PYTHONDONTWRITEBYTECODE = '1'
       & python @argv 1>$outFile.FullName 2>$errFile.FullName
       $exitCode = $LASTEXITCODE
       $stdout = Get-Content -Raw -LiteralPath $outFile.FullName
@@ -65,6 +72,9 @@ function Invoke-PythonBatch {
   }
 
   $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+  $tempEntry = New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry `
+    -ArgumentList 'batchTempDir', $batchTempDir, $null
+  $iss.Variables.Add($tempEntry)
   if ($Variables) {
     foreach ($key in $Variables.Keys) {
       $entry = New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry `

@@ -31,7 +31,7 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 ASSEMBLE_PY = SKILL_ROOT / "scripts" / "assemble-inputs.py"
 DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -48,12 +48,8 @@ def canonical_json_sha(obj: object) -> str:
 
 
 def parse_languages(value: str) -> list[str]:
-    langs = [s.strip() for s in (value or "en").split(",") if s.strip()]
-    seen: list[str] = []
-    for l in (["en"] + langs):
-        if l not in seen:
-            seen.append(l)
-    return seen
+    langs = [s.strip().lower() for s in (value or "en").split(",") if s.strip()]
+    return list(dict.fromkeys(langs))
 
 
 def load_source_root(override: str | None) -> Path:

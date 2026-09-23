@@ -9,7 +9,7 @@ with section drafts targeted at `docs/_shared/<file>/_req-sections/<lang>/<secti
 For ONE source file + ONE requirements section spec, loads:
   - the section spec from the chosen REQ profile's `profile.yaml`
   - a section-scoped slice of `docs/_shared/<file>/facts.json`
-  - a heading-matched excerpt from `docs/en/<file>/complete.md` (when present)
+  - a heading-matched excerpt from the first requested language's `complete.md` (when present)
   - the `.mmd` source for every diagram listed in `section.embed_diagrams`
   - the template snippet matching the section heading from
     `template.md` / `template.<lang>.md`
@@ -33,7 +33,7 @@ import yaml
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
@@ -133,10 +133,7 @@ def resolve_source(source: str, source_root: Path) -> Path:
 
 def parse_languages(value: str) -> list[str]:
     parts = [p.strip().lower() for p in (value or "en").split(",") if p.strip()]
-    if "en" in parts:
-        rest = [p for p in parts if p != "en"]
-        return ["en", *rest]
-    return ["en", *parts]
+    return list(dict.fromkeys(parts))
 
 
 def rel(p: Path) -> str:
@@ -416,7 +413,7 @@ def main() -> int:
     template_text = template_bytes.decode("utf-8", errors="replace")
     snippet = template_snippet(template_text, section.get("number"), section.get("title"))
 
-    complete_md_path = REPO_ROOT / "docs" / "en" / source_path.name / "complete.md"
+    complete_md_path = REPO_ROOT / "docs" / languages[0] / source_path.name / "complete.md"
     complete_md = complete_md_path.read_text(encoding="utf-8", errors="replace") if complete_md_path.exists() else ""
     excerpt = heading_excerpt(complete_md, section.get("number"), section.get("title"))
 

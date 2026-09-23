@@ -1,0 +1,96 @@
+name: default
+version: "1.0"
+document_type: technical-analysis
+
+identifier_lock_regex: "[A-Z][A-Z0-9-]*(\\.[A-Z0-9-]+)?"
+require_citations: true
+
+front_matter:
+  title_pattern: "Technical analysis - {{PROGRAM_ID}}"
+  show_classification: true
+  show_metadata_table: true
+  classification:
+    default: Internal
+  state_options:
+    - DRAFT
+  template_version: "1.0"
+
+sections:
+  - id: header
+    title: Technical analysis
+    required: true
+
+  - id: purpose-scope
+    number: "1"
+    title: Purpose and scope
+    required: true
+    min_paragraphs: 1
+
+  - id: architecture-context
+    number: "2"
+    title: Architecture and execution context
+    required: true
+    min_paragraphs: 1
+
+  - id: processing-flow
+    number: "3"
+    title: Processing flow
+    required: true
+    min_paragraphs: 1
+
+  - id: program-structure
+    number: "4"
+    title: Program structure and components
+    required: true
+    min_paragraphs: 1
+
+  - id: data-model
+    number: "5"
+    title: Data model and storage
+    required: false
+    optional_marker: "No source-backed data model or storage behavior was identified."
+
+  - id: input-output
+    number: "6"
+    title: Inputs and outputs
+    required: false
+    optional_marker: "No source-backed inputs or outputs were identified."
+
+  - id: interfaces-dependencies
+    number: "7"
+    title: Interfaces and dependencies
+    required: false
+    optional_marker: "No source-backed interfaces or dependencies were identified."
+
+  - id: error-recovery
+    number: "8"
+    title: Error handling and recovery
+    required: false
+    optional_marker: "No source-backed error-handling or recovery behavior was identified."
+
+  - id: runtime-deployment
+    number: "9"
+    title: Runtime and deployment considerations
+    required: false
+    optional_marker: "No source-backed runtime or deployment considerations were identified."
+
+  - id: security-controls
+    number: "10"
+    title: Security and data-protection controls
+    required: false
+    optional_marker: "No source-backed security or data-protection controls were identified."
+
+  - id: operations
+    number: "11"
+    title: Operations and observability
+    required: false
+    optional_marker: "No source-backed operational or observability behavior was identified."
+
+  - id: constraints-open-points
+    number: "12"
+    title: Constraints and open points
+    required: false
+    optional_marker: "No source-backed constraints or open points were identified."
+
+footer:
+  text: "Generated from source-backed pipeline evidence."

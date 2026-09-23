@@ -30,8 +30,11 @@ Phase-J finalizer step only. Authoring of per-section drafts is owned by
 
 # Outputs
 
-- `docs/en/_groups/<group_id>/requirements.md`
-- `docs/<target_language>/_groups/<group_id>/requirements.md`
+- `docs/<lang>/_groups/<group_id>/requirements.md`
+
+Finalize exactly `bundle.languages` in declared order at `bundle.output_paths`.
+Never require or create an unrequested English edition or intermediate.
+Check structural parity only when multiple languages are requested.
 
 # Determinism rules
 

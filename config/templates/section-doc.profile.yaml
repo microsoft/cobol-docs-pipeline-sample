@@ -1,0 +1,7 @@
+# Shared authoring and QA thresholds for per-chunk section documentation.
+min_total_words: 1500
+min_purpose_sentences: 4
+min_purpose_words: 80
+max_tldr_words: 30
+identifier_lock_regex: "[A-Z][A-Z0-9-]*(\\.[A-Z0-9-]+)?"
+require_citations: true

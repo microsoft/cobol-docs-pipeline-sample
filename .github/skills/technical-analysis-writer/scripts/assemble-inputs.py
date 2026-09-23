@@ -2,7 +2,7 @@
 """Deterministic per-file technical-analysis (ATE) bundle packager.
 
 SIMPLE single-pass finalizer input. For ONE source file it loads:
-  - the EN consolidated documentation `docs/en/<file>/complete.md`
+  - the first requested language's consolidated documentation `docs/<lang>/<file>/complete.md`
     (the SINGLE narrative source the writer draws from),
   - the resolved technical-analysis profile + per-language template,
   - front-matter values derived from `docs/_shared/<file>/facts.json`,
@@ -24,7 +24,7 @@ import yaml
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 DOC_SHARED = REPO_ROOT / "docs" / "_shared"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
@@ -68,8 +68,7 @@ def resolve_source(source: str, source_root: Path) -> Path:
 
 def parse_languages(value: str) -> list[str]:
     parts = [p.strip().lower() for p in (value or "en").split(",") if p.strip()]
-    rest = [p for p in parts if p != "en"]
-    return ["en", *rest]
+    return list(dict.fromkeys(parts))
 
 
 def rel(p: Path) -> str:
@@ -127,7 +126,7 @@ def render_md_view(bundle: dict) -> str:
         out.append((tpl or "").rstrip())
         out.append("```")
         out.append("")
-    out.append("## Narrative source — EN complete.md")
+    out.append(f"## Narrative source — {bundle['languages'][0]} complete.md")
     out.append("")
     out.append("```markdown")
     out.append((bundle.get("complete_md") or "").rstrip())
@@ -206,8 +205,8 @@ def main() -> int:
         )
         return EXIT_MISSING_PREREQ
 
-    # Phase-E prerequisite: the EN consolidated doc.
-    complete_md_path = REPO_ROOT / "docs" / "en" / source_path.name / "complete.md"
+    languages = parse_languages(args.languages)
+    complete_md_path = REPO_ROOT / "docs" / languages[0] / source_path.name / "complete.md"
     if not complete_md_path.exists():
         print(f"ERROR: missing complete.md (run phase E first): {complete_md_path}", file=sys.stderr)
         return EXIT_MISSING_PREREQ
@@ -217,7 +216,6 @@ def main() -> int:
     profile_bytes = profile_yaml_path.read_bytes()
     profile = yaml.safe_load(profile_bytes.decode("utf-8")) or {}
 
-    languages = parse_languages(args.languages)
     templates_by_lang = tpr.template_paths(resolution.profile_dir, languages)
     templates = {lang: p.read_text(encoding="utf-8", errors="replace") for lang, p in templates_by_lang.items()}
 

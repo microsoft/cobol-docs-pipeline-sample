@@ -13,7 +13,7 @@
     M.3  scripts/lib/Convert-MdToDocx.ps1 (pandoc, plain default styling)
 
   Single-pass: the consolidated narrative source is the per-group
-  docs/en/_groups/<group_id>/complete.md (phase-I output), reorganized into
+  docs/<first-language>/_groups/<group_id>/complete.md (phase-I output), reorganized into
   the resolved group technical-analysis profile/template structure.
 
   An empty `groups: []` manifest is a no-op (exit 0).

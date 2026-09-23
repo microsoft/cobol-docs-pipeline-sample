@@ -9,7 +9,7 @@
   across the given inputs using the shared runspace-pool helper. Deterministic
   (no LLM). Produces
     docs/_shared/<file>/_ta-bundles/_finalize.bundle.{json,md}
-  from the EN consolidated doc docs/en/<file>/complete.md + the resolved
+  from docs/<first-language>/<file>/complete.md + the resolved
   technical-analysis profile/template, so the per-file dispatch
   (run-docs-ta-finalize-batch.ps1) has a bundle to read.
 

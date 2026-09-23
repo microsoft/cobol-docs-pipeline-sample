@@ -3,7 +3,7 @@
 
 Enforces the binding authoring rules from
   - `config/templates/procedure-section-doc.template.md`
-  - the active `config/templates/docs/<profile>/profile.yaml`
+    - the active `config/templates/section-doc.profile.yaml`
 
 Emits a JSON review sidecar at
   `docs/_reviews/section-doc/<file>__<chunk_id>__<lang>.json`
@@ -30,8 +30,8 @@ import yaml
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
-DEFAULT_PROFILE = REPO_ROOT / "config" / "templates" / "docs" / "functional-analysis" / "default" / "profile.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
+DEFAULT_PROFILE = REPO_ROOT / "config" / "templates" / "section-doc.profile.yaml"
 DEFAULT_REVIEW_ROOT = REPO_ROOT / "docs" / "_reviews" / "section-doc"
 
 EXIT_OK = 0

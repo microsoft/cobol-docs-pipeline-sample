@@ -12,6 +12,9 @@ Your role is to generate high-quality section documentation for exactly one requ
 ## Scope
 - Document one chunk-level section from prepared phase-C inputs under docs/_shared/<file>/.
 - Produce section markdown output for that single chunk under docs/<language>/<file>/sections/.
+- Write exactly `bundle.languages`, in declared order, at `bundle.output_paths`.
+  Do not add an English edition or intermediate unless requested. Keep neutral
+  diagrams shared and compare language parity only for multiple requested languages.
 - Keep output aligned with templates and profile rules.
 
 ## Reuse First

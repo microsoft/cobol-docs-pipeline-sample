@@ -26,7 +26,7 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SKILL_ROOT.parent.parent.parent
 SCHEMA_PATH = SKILL_ROOT / "schemas" / "outputs.schema.json"
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 
 # ---------- helpers ------------------------------------------------------

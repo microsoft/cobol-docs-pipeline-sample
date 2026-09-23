@@ -20,7 +20,7 @@ import yaml
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SKILL_ROOT.parent.parent.parent
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 # Exit codes (mirrors sibling skills).
 EXIT_OK = 0
@@ -136,7 +136,7 @@ def main() -> int:
     ap.add_argument("--source", help="Path to the source file (repo-relative or absolute).")
     ap.add_argument("--manifest", help="Override path to chunk-manifest.json.")
     ap.add_argument("--output-dir", help="Override default docs/_shared/<file>/chunks dir.")
-    ap.add_argument("--source-root", help="Override sources.yaml::source_root.")
+    ap.add_argument("--source-root", help="Override pipeline.yaml::source_root.")
     ap.add_argument("--chunk-id", help="Extract only the named chunk_id.")
     ap.add_argument("--prune", action="store_true", help="Delete .txt files for chunks no longer in the manifest.")
     ap.add_argument("--no-index", action="store_true", help="Do not write index.json.")

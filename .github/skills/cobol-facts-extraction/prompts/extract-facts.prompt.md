@@ -4,7 +4,7 @@ description: 'Generate facts.json for one or more mainframe sources (COBOL / JCL
 
 # Extract mainframe facts → facts.json
 
-Use the [`cobol-facts-extraction`](../SKILL.md) skill to produce a `facts.json` knowledge graph for each source the user specifies (or, if none specified, every file matched by `config/sources.yaml::include`). Requires the matching `chunk-manifest.json` from phase A; if missing, stop and tell the user to run [`/chunk-cobol`](../../cobol-chunking/prompts/chunk-cobol.prompt.md) first.
+Use the [`cobol-facts-extraction`](../SKILL.md) skill to produce a `facts.json` knowledge graph for each source the user specifies (or, if none specified, every file matched by `config/pipeline.yaml::include`). Requires the matching `chunk-manifest.json` from phase A; if missing, stop and tell the user to run [`/chunk-cobol`](../../cobol-chunking/prompts/chunk-cobol.prompt.md) first.
 
 For each target file:
 

@@ -160,7 +160,17 @@ $ok     = $results.Count - $failed.Count
 Write-Host "DONE total=$($results.Count) ok=$ok failed=$($failed.Count)"
 if ($failed.Count -gt 0) {
   Write-Host 'Failures:'
-  $failed | ForEach-Object { Write-Host "  [$($_.Exit)] $($_.Path)" }
+  $failed | ForEach-Object {
+    $detail = ([string]$_.Stderr).Trim()
+    if (-not $detail) { $detail = ([string]$_.Stdout).Trim() }
+    if ($detail) {
+      $detail = ($detail -split "\r?\n" | Select-Object -Last 1)
+      Write-Host "  [$($_.Exit)] $($_.Path) :: $detail"
+    }
+    else {
+      Write-Host "  [$($_.Exit)] $($_.Path)"
+    }
+  }
   exit 1
 }
 exit 0

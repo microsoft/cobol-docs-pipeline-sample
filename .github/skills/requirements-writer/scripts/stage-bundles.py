@@ -28,7 +28,7 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 ASSEMBLE_PY = SKILL_ROOT / "scripts" / "assemble-inputs.py"
 DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 import req_profile_resolver as rpr  # noqa: E402
@@ -121,9 +121,9 @@ def main() -> int:
     profile = rpr.load_profile_yaml(resolution.profile_dir)
     sections = [s for s in rpr.flatten_sections(profile) if s.get("id") != "header"]
 
-    expected_languages = ["en"] + [
-        x.strip() for x in args.languages.split(",") if x.strip() and x.strip() != "en"
-    ]
+    expected_languages = list(dict.fromkeys(
+        x.strip().lower() for x in args.languages.split(",") if x.strip()
+    ))
     expected_names: set[str] = set()
     ok = 0
     failed: list[tuple[str, int, str]] = []

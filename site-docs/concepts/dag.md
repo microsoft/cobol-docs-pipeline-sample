@@ -21,7 +21,7 @@ flowchart LR
     I --> J
     G --> K[K Group functional analysis]
     J --> K
-    G --> L[L Per-file technical analysis]
+    C --> L[L Per-file technical analysis]
     I --> M[M Group technical analysis]
     L --> M
     F --> N[N Execution portal]
@@ -46,9 +46,20 @@ flowchart LR
 | L-M | L-M | Per-file and group technical analysis |
 | N | N | Build the generated-documentation execution portal |
 
+This mapping describes available phases, not a requirement to run every phase.
+Without explicit phase selectors, `output.generate` in `config/pipeline.yaml`
+selects deliverables and adds their prerequisites. H is selected only for
+`docs: true`; technical analysis L/M needs E/I narrative, not F/G/J/K.
+Any enabled output adds N, while all four output flags set to `false` do no
+work, including discovery. See [configuration](../guides/configuration.md#select-generated-deliverables).
+
+Explicit `-Phases` or explicitly supplied `-From`/`-To` bypasses YAML selection
+without adding prerequisites. Legacy `Run*` false toggles and `-Skip` remove
+phases last; neither runner repairs those removals.
+
 ## Execution waves
 
-`config/sources.yaml` selects an execution mode.
+`config/pipeline.yaml` selects an execution mode.
 
 ### `per-file-loop`
 

@@ -8,8 +8,9 @@ argument-hint: 'Source file path + optional --languages en,it. Writes docs/<lang
 
 LLM-driven phase-F finalizer. For ONE source file, stitches the per-section
 requirements drafts written by [`requirements-writer`](../requirements-writer/SKILL.md)
-into a single, complete `requirements.md` per requested language. EN is the
-source-of-truth; non-EN siblings are co-finalised in the same LLM call.
+into a single, complete `requirements.md` for exactly `bundle.languages`, in
+declared order at `bundle.output_paths`, co-finalised in the same LLM call.
+Never require or create an unrequested English edition or intermediate.
 
 > **Status:** implemented. The contract and bundle schema are pinned, and the
 > requirements-specific packager under [scripts/](./scripts/) is implemented.
@@ -62,8 +63,8 @@ The document MUST:
 - Renumber per-section `[^src-N]` footnotes into ONE consolidated `## Sources`
   block at the end of the document.
 - Append the footer from `profile.footer` verbatim when present.
-- For non-EN languages, mirror the EN heading structure, requirement ids,
-  table row count, and consolidated footnote ids 1:1.
+- When multiple languages are requested, align heading structure, requirement ids,
+  table row count, and consolidated footnote ids 1:1 across those languages only.
 
 ## Procedure
 

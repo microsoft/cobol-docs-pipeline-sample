@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://org.example.com/schemas/pipeline.schema.json",
+  "title": "Pipeline configuration",
+  "description": "Schema for config/pipeline.yaml — controls sources, output languages and generation, execution settings, profiles, and modernization targets.",
+  "type": "object",
+  "required": ["source_root", "include", "modernization"],
+  "additionalProperties": false,
+  "properties": {
+    "copilot": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Copilot model default; overridden by -CopilotModel. Omit default_model to retain agent-specific model selection, then auto.",
+      "properties": {
+        "default_model": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+          "description": "Copilot CLI model ID (e.g. claude-sonnet-4.5), or auto. Empty and null values are invalid."
+        }
+      }
+    },
+    "source_root": {
+      "type": "string",
+      "description": "Absolute path (or relative to repo root) to the folder containing COBOL/JCL sources."
+    },
+    "include": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Folder names or globs relative to source_root. Folder names are scanned recursively."
+    },
+    "exclude": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "encodings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["auto", "utf-8", "cp037", "cp1047", "cp1140", "cp1252", "latin-1"]
+      }
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["auto", "mainframe", "ibmi"],
+      "default": "auto",
+      "description": "Default COBOL runtime platform. ibmi covers IBM i (AS/400) ILE COBOL sources."
+    },
+    "platforms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["auto", "mainframe", "ibmi"]
+      },
+      "default": {},
+      "description": "Per-file platform overrides keyed by glob relative to source_root."
+    },
+    "functional_analysis_profile": { "type": "string", "default": "default" },
+    "requirements_profile": { "type": "string", "default": "default" },
+    "output": {
+      "type": "object",
+      "description": "Documentation output defaults for both public pipeline runners.",
+      "additionalProperties": false,
+      "properties": {
+        "generate": {
+          "type": "object",
+          "description": "File and group outputs for default runs. Missing switches default to true. Required prerequisites are included automatically; explicit phase/range selectors override this selection.",
+          "additionalProperties": false,
+          "properties": {
+            "docs": {
+              "type": "boolean",
+              "default": true,
+              "description": "Generate section/file/group documentation and overview diagrams."
+            },
+            "functional_analysis": {
+              "type": "boolean",
+              "default": true,
+              "description": "Generate file/group functional analysis, including documentation and requirements prerequisites."
+            },
+            "requirements": {
+              "type": "boolean",
+              "default": true,
+              "description": "Generate file/group requirements, including documentation prerequisites."
+            },
+            "technical_analysis": {
+              "type": "boolean",
+              "default": true,
+              "description": "Generate file/group technical analysis, including documentation prerequisites."
+            }
+          }
+        },
+        "languages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+          },
+          "default": ["en"],
+          "description": "Exact documentation language codes, e.g. [it] or [en, it]. Defaults to English only when unspecified. The static portal currently supports en and it."
+        }
+      }
+    },
+    "copybook_search_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "pipeline": {
+      "type": "object",
+      "description": "Public runner Copilot concurrency and declarative orchestrator execution settings.",
+      "additionalProperties": false,
+      "properties": {
+        "copilot_parallelism": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 16,
+          "description": "Maximum concurrent Copilot tasks per stage in both public runners. Overridden by -CopilotThrottle and explicit phase-specific throttle options."
+        },
+        "execution_mode": {
+          "type": "string",
+          "enum": ["per-file-loop", "per-phase"],
+          "default": "per-file-loop",
+          "description": "Declarative orchestrator setting, not read by public runners. per-file-loop: file-scoped phases end-to-end per file, then workspace phases. per-phase: DAG-wide execution."
+        },
+        "per_file_parallelism": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Declarative orchestrator file concurrency when execution_mode=per-file-loop. Not read by public runners."
+        }
+      }
+    },
+    "modernization": {
+      "type": "object",
+      "required": ["target_languages", "orchestration_target", "db_target"],
+      "additionalProperties": false,
+      "properties": {
+        "target_languages": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["java", "dotnet"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "orchestration_target": {
+          "type": "string",
+          "enum": ["spring-batch", "azure-functions", "airflow", "step-functions"]
+        },
+        "db_target": {
+          "type": "string",
+          "enum": ["postgres", "sqlserver", "db2", "as-is"]
+        }
+      }
+    }
+  }
+}

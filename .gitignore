@@ -3,6 +3,7 @@
 Thumbs.db
 .vscode/
 .idea/
+.vs/
 *.swp
 *.swo
 
@@ -23,15 +24,29 @@ node_modules/
 # Build/test output
 coverage/
 htmlcov/
-site/
+[Bb]in/
+[Oo]bj/
+/site/
 *.log
 *.zip
 
 # Repo-local temp artifacts
-temp/
-logs/
-docs/
-#repos/
+/temp/
+/temp/_generated/
+/temp/copilot-cli-logs/
+/temp/logs/
+/temp/otel/
+/temp/python-batch/
+/logs/
+/docs/
+/_docs/
+
+# Source workspaces: keep only the versioned samples
+/repos/*
+!/repos/sample/
+!/repos/sample/**
+!/repos/sample-as400/
+!/repos/sample-as400/**
 
 # Generated pipeline result files (execution outputs)
 # These are now saved to temp/ directory by default

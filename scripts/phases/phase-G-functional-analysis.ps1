@@ -11,7 +11,7 @@
     G.2  scripts/dispatchers/run-docs-fa-section-batch.ps1
     G.3  scripts/dispatchers/run-docs-fa-finalize-batch.ps1
 
-  Prereqs per source: docs/en/<basename>/complete.md (phase-E output).
+  Prereqs per source: docs/<first-language>/<basename>/complete.md (phase-E output).
   On a missing prereq, exits with code 4.
 
 .PARAMETER Languages
@@ -78,8 +78,9 @@ if (-not $Files -and -not $Paths -and -not $Manifest) {
 }
 
 $sources = Get-PhaseInputs -Files $Files -Paths $Paths -Manifest $Manifest
+$primaryLanguage = ($Languages -split ',')[0].Trim().ToLowerInvariant()
 Assert-PhasePrereqs -RepoRoot $repoRoot -Sources $sources -PhaseId G `
-  -RequiredArtifacts @('docs/en/<basename>/complete.md')
+  -RequiredArtifacts @("docs/$primaryLanguage/<basename>/complete.md")
 
 New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
 $resultsDirFull = (Resolve-Path -LiteralPath $ResultsDir).Path

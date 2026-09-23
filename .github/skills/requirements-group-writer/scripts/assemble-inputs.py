@@ -46,12 +46,8 @@ def canonical_json_sha(obj: object) -> str:
 
 
 def parse_languages(value: str) -> list[str]:
-    raw = [s.strip() for s in (value or "en").split(",") if s.strip()]
-    seen: list[str] = []
-    for l in ["en", *raw]:
-        if l not in seen:
-            seen.append(l)
-    return seen
+    raw = [s.strip().lower() for s in (value or "en").split(",") if s.strip()]
+    return list(dict.fromkeys(raw))
 
 
 def load_grouping(manifest_path: Path) -> dict:
@@ -120,10 +116,11 @@ def build_member_record(member: str, languages: list[str]) -> dict:
             "excerpt": excerpt_head(req, MEMBER_DOC_MAX_CHARS),
         }
 
-    if not docs.get("en", {}).get("exists"):
+    primary_language = languages[0]
+    if not docs[primary_language]["exists"]:
         raise SystemExit(
-            f"ERROR: phase-F EN requirements.md missing for member {basename!r} \u2014 "
-            f"expected docs/en/{basename}/requirements.md"
+            f"ERROR: phase-F {primary_language} requirements.md missing for member {basename!r} \u2014 "
+            f"expected docs/{primary_language}/{basename}/requirements.md"
         )
 
     return {
@@ -157,6 +154,7 @@ def build_glossary_info() -> dict:
 
 
 def render_markdown_view(bundle: dict) -> str:
+    primary_language = bundle["languages"][0]
     lines: list[str] = []
     lines.append(f"# Group requirements finalize bundle \u2014 `{bundle['group_id']}`\n")
     desc = bundle.get("group_description") or "(no description)"
@@ -174,13 +172,13 @@ def render_markdown_view(bundle: dict) -> str:
             f"{i}. `{m['basename']}` ({m.get('source_kind') or 'unknown'}, "
             f"{m.get('source_platform') or 'mainframe'})"
         )
-    lines.append("\n## Group context (phase-I complete.md, EN)\n")
-    gen = bundle["group_doc"].get("en") or {}
+    lines.append(f"\n## Group context (phase-I complete.md, {primary_language})\n")
+    gen = bundle["group_doc"].get(primary_language) or {}
     if gen.get("excerpt"):
-        lines.append("\n<details><summary>EN complete.md excerpt</summary>\n\n```markdown")
+        lines.append(f"\n<details><summary>{primary_language} complete.md excerpt</summary>\n\n```markdown")
         lines.append(gen["excerpt"].rstrip())
         lines.append("```\n\n</details>\n")
-    lines.append("\n## Member requirements (phase-F, EN)\n")
+    lines.append(f"\n## Member requirements (phase-F, {primary_language})\n")
     for m in bundle["members"]:
         lines.append(
             f"### `{m['basename']}` ({m.get('source_kind') or 'unknown'}, "
@@ -188,11 +186,11 @@ def render_markdown_view(bundle: dict) -> str:
         )
         if m.get("program_id"):
             lines.append(f"- program_id: `{m['program_id']}`")
-        lines.append(f"- source requirements: `{m['docs']['en']['requirements']}`")
-        en = m["docs"].get("en") or {}
-        if en.get("excerpt"):
-            lines.append("\n<details><summary>EN requirements.md excerpt</summary>\n\n```markdown")
-            lines.append(en["excerpt"].rstrip())
+        primary = m["docs"][primary_language]
+        lines.append(f"- source requirements: `{primary['requirements']}`")
+        if primary.get("excerpt"):
+            lines.append(f"\n<details><summary>{primary_language} requirements.md excerpt</summary>\n\n```markdown")
+            lines.append(primary["excerpt"].rstrip())
             lines.append("```\n\n</details>\n")
         lines.append("")
     return "\n".join(lines) + "\n"

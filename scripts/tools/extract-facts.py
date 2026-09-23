@@ -26,7 +26,7 @@ SCRIPT_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_ROOT.parent.parent
 SCHEMA_PATH = SCRIPT_ROOT.parent / "schemas" / "facts.schema.json"
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 
 # ---------- helpers ------------------------------------------------------

@@ -9,7 +9,7 @@
   bundles under `docs/_shared/<basename>/_fa-bundles/*.bundle.json`
   (excluding `_finalize.bundle.json` and any `_`-prefixed file) and
   invokes the `functional-analysis-writer` agent (per-section scope) so it
-  co-authors EN + every requested language in one response.
+  co-authors exactly the requested languages in one response.
 
   Mechanics delegated to scripts/lib/Invoke-CopilotDispatch.ps1.
 #>

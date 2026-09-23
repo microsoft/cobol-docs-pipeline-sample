@@ -27,7 +27,9 @@ Do not create parallel custom writing/review rules when existing skills already 
    - source path
    - exactly one chunk ID
    - bundle paths: the rendered Markdown view at `docs/_shared/<file>/_bundles/<chunk>.bundle.md` (handed to section-writer + section-reviewer LLM passes) and its authoritative `.bundle.json` sibling (handed to the mechanical `check-section-doc.py` checker invoked by section-reviewer)
-   - languages (default: en)
+   - languages matching exactly `bundle.languages`, in declared order (default:
+     en only when no language is provided); never append English or require an
+     English intermediate for another requested language.
 2. Call section-writer for the chunk.
 3. Call section-reviewer on generated outputs.
 4. If reviewer returns needs-fix:
@@ -58,12 +60,17 @@ Do not create parallel custom writing/review rules when existing skills already 
 - Do not skip reviewer gate.
 - Do not mark complete without reviewer ok.
 - Keep all file changes limited to the target chunk artifacts.
+- Do not create scratch files or directories in the repository root. Any
+  temporary working artifact must be created under `temp/` and removed when the
+  chunk finishes.
 
 ## Execution rules (binding for delegated agents)
 Pass these rules verbatim to `section-writer` (and re-assert them on each rewrite after `section-reviewer` returns `needs-fix`):
 - Focus exclusively on content generation. Do not narrate reasoning, do not preview the plan, do not ask questions, do not request confirmation.
 - Do not read any file other than the bundle MD and the files explicitly listed under the bundle's `## Output paths` parent directories. Do NOT re-read `facts.json`, facts-slices, chunks, `chunk-manifest.json`, or the `.bundle.json` sibling — the MD already embeds everything needed.
 - Write each output file exactly once at the absolute path declared under `## Output paths`; never invent paths.
+- Do not create scratch files or directories in the repository root. Put any
+  temporary working artifact under `temp/` and remove it before returning.
 - Follow the binding authoring rules from the template file linked under the bundle's `## Template` block (its `template_path`). The bundle MD links to the template instead of inlining its body; `template_sha` in Metadata pins the exact bytes you must obey (sections, citation footnotes, identifier styling, diagram captions, self-check).
 - When done, the writer must print ONE short final line of the form: `DONE chunk=<chunkId> files=<N> langs=<csv>` and stop. No summary, no recap, no next-steps.
 

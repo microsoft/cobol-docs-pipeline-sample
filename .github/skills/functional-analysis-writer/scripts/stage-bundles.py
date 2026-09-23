@@ -27,7 +27,7 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 ASSEMBLE_PY = SKILL_ROOT / "scripts" / "assemble-inputs.py"
 DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 import fa_profile_resolver as fpr  # noqa: E402
@@ -108,10 +108,19 @@ def main() -> int:
     if skip_marker.exists():
         skip_marker.unlink()
 
-    assert resolution.profile_dir is not None
+    if resolution.profile_dir is None:
+        print(
+            f"ERROR: functional-analysis profile '{resolution.profile}' is not available under "
+            f"{fpr.FA_ROOT} ({resolution.reason})",
+            file=sys.stderr,
+        )
+        return EXIT_MISSING_PREREQ
     profile = fpr.load_profile_yaml(resolution.profile_dir)
     sections = [s for s in fpr.flatten_sections(profile) if s.get("id") != "header"]
 
+    expected_languages = list(dict.fromkeys(
+        x.strip().lower() for x in args.languages.split(",") if x.strip()
+    ))
     expected_names: set[str] = set()
     ok = 0
     failed: list[tuple[str, int, str]] = []
@@ -126,7 +135,7 @@ def main() -> int:
                 existing = json.loads(out_path.read_text(encoding="utf-8"))
                 if (existing.get("section", {}).get("id") == sid
                         and existing.get("profile_name") == resolution.profile
-                        and existing.get("languages") == [l for l in (["en"] + [x.strip() for x in args.languages.split(",") if x.strip() and x.strip() != "en"])]):
+                        and existing.get("languages") == expected_languages):
                     ok += 1
                     continue
             except (OSError, ValueError):

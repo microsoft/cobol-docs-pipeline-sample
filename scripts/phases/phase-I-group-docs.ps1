@@ -8,7 +8,7 @@
 .DESCRIPTION
   Independent, autoconsistent entry point for phase I. When implemented
   the driver iterates groups from config/grouping.yaml, asserts every
-  member's phase-E output exists (docs/en/<member>/{index,complete}.md),
+  member's phase-E output exists (docs/<first-language>/<member>/{index,complete}.md),
   stages a per-group finalize bundle at
     docs/_shared/_groups/<group_id>/_doc-bundles/_finalize.bundle.{json,md}
   and dispatches the `group-doc-finalizer` agent once per group to write
@@ -138,4 +138,3 @@ exit (Invoke-PhaseBatch -PhaseId I -ResultsXml $dispXml -Action {
     foreach ($f in $docxFail) { Write-Warning "DOCX failed: $($f.MarkdownPath) :: $($f.Stderr)" }
   }
 })
-

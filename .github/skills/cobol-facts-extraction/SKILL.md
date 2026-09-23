@@ -76,7 +76,7 @@ Every collection entry that originates from inside a chunk MUST carry a `chunk_i
 
 ## Procedure
 
-1. **Resolve inputs.** Locate the source file (same rules as [`cobol-chunking`](../cobol-chunking/SKILL.md): tried relative to repo root first, then to `source_root` from `config/sources.yaml`). Locate the chunk manifest at `docs/_shared/<basename-with-ext>/chunk-manifest.json` unless `--manifest <path>` overrides it. Reject if either input is missing.
+1. **Resolve inputs.** Locate the source file (same rules as [`cobol-chunking`](../cobol-chunking/SKILL.md): tried relative to repo root first, then to `source_root` from `config/pipeline.yaml`). Locate the chunk manifest at `docs/_shared/<basename-with-ext>/chunk-manifest.json` unless `--manifest <path>` overrides it. Reject if either input is missing.
 2. **Run the extractor.** Invoke [scripts/extract-facts.py](./scripts/extract-facts.py):
    ```powershell
    python .github/skills/cobol-facts-extraction/scripts/extract-facts.py `
@@ -84,7 +84,7 @@ Every collection entry that originates from inside a chunk MUST carry a `chunk_i
    ```
    Flags:
    - `--output <path>` — override the default `docs/_shared/<basename-with-ext>/facts.json`.
-   - `--source-root <root>` — override `sources.yaml::source_root`.
+   - `--source-root <root>` — override `pipeline.yaml::source_root`.
    - `--manifest <path>` — override the default chunk-manifest location.
    - `--xref-pass` — switch to workspace mode: re-scan all per-file `facts.json` files under `docs/_shared/**/facts.json` and populate `incoming_xref[]` on every file. Equivalent to running [scripts/xref-incoming-pass.py](./scripts/xref-incoming-pass.py) directly. No `--source` is required in this mode.
 3. **Validate.** The script self-validates against [schemas/outputs.schema.json](./schemas/outputs.schema.json) when `jsonschema` is installed (`pip install jsonschema pyyaml`). On schema failure: exit code `3`, error on stderr, **no file written**.

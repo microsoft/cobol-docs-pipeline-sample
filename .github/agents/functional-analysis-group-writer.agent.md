@@ -19,8 +19,9 @@ scopes; the bundle's `scope` field tells you which.
 - `per-section` — author ONE group functional-analysis section draft per language for ONE group.
 - `per-group`   — stitch the per-section drafts into ONE `functional-analysis.md` per language for ONE group.
 
-Both scopes co-author EN + every target language in the SAME LLM call. EN is
-the source of truth; the non-EN drafts must mirror it structurally 1:1
+Both scopes author exactly `bundle.languages`, in its declared order, at
+`bundle.output_paths` in the SAME LLM call. Never add an unrequested English
+edition or intermediate. For multiple requested languages, align structure 1:1
 (heading count, `[^src-N]` ids, table row count, cited requirement ids).
 
 ## Reuse First
@@ -57,9 +58,7 @@ the source of truth; the non-EN drafts must mirror it structurally 1:1
 ## Output paths
 
 Per-section scope:
-- `docs/_shared/_groups/<group_id>/_fa-group-sections/en/<section_id>.md`
-- `docs/_shared/_groups/<group_id>/_fa-group-sections/<target_language>/<section_id>.md`
+- `docs/_shared/_groups/<group_id>/_fa-group-sections/<lang>/<section_id>.md`
 
 Per-group scope:
-- `docs/en/_groups/<group_id>/functional-analysis.md`
-- `docs/<target_language>/_groups/<group_id>/functional-analysis.md`
+- `docs/<lang>/_groups/<group_id>/functional-analysis.md` for each requested language only.

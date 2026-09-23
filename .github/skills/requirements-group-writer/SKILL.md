@@ -26,8 +26,10 @@ argument-hint: <group_id> <bundle.bundle.md path> [target_languages]
 # Scope
 
 Owns phase-J authoring at the group level. One invocation per section
-(per-section scope) or per group (finalizer scope), each covering EN
-plus every requested translation language.
+(per-section scope) or per group (finalizer scope), each covering exactly
+`bundle.languages` in declared order at `bundle.output_paths`. Never add an
+unrequested English edition or intermediate. Structural parity applies only
+when multiple languages are requested.
 
 Sibling skills:
 - `requirements-writer` / `requirements-finalizer` — per-file ATE (phase F).
@@ -47,16 +49,18 @@ Per-group finalizer scope:
 
 Bundles aggregate, per group:
 - Each member's `docs/<lang>/<member>/requirements.md` excerpts (phase F).
+- Member narrative inputs and bundle excerpts use `<lang> = bundle.languages[0]`;
+  do not require an English intermediate or member inputs in every output language.
 - The group's `docs/<lang>/_groups/<group_id>/complete.md` excerpts (phase I).
 - `config/grouping.yaml` description + member list.
 - The active ATE profile (auto-detected per group).
 
 # Outputs
 
-- `docs/_shared/_groups/<group_id>/_req-group-sections/en/<section_id>.md`
-- `docs/_shared/_groups/<group_id>/_req-group-sections/<target_language>/<section_id>.md`
-- `docs/en/_groups/<group_id>/requirements.md`
-- `docs/<target_language>/_groups/<group_id>/requirements.md`
+- `docs/_shared/_groups/<group_id>/_req-group-sections/<lang>/<section_id>.md`
+- `docs/<lang>/_groups/<group_id>/requirements.md`
+
+Write only the languages and paths declared in the bundle.
 
 # Determinism rules
 

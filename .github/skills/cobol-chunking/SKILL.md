@@ -12,7 +12,7 @@ argument-hint: 'Path to a source file (e.g. DEMO100.CBL or ORDENTRY.SQLCBLLE), o
 - `source_platform` is always resolved to `mainframe` or `ibmi`; `ibmi`
   covers IBM i, AS/400, iSeries, and ILE COBOL terminology.
 - `.CBLLE` and `.SQLCBLLE` resolve to COBOL on IBM i. Use
-  `--platform-hint` or `config/sources.yaml::platforms` for explicit overrides.
+  `--platform-hint` or `config/pipeline.yaml::platforms` for explicit overrides.
 - `.CL`, `.CLP`, and `.CLLE` resolve to CL on IBM i. CL is IBM i control
   language and must not be interpreted as mainframe JCL.
 
@@ -59,7 +59,7 @@ Chunk `kind` values, by `source_kind`:
 
 ## Procedure
 
-1. **Resolve inputs.** `--source` is tried first relative to repo root, then to `source_root` from `config/sources.yaml`. Reject if neither resolves.
+1. **Resolve inputs.** `--source` is tried first relative to repo root, then to `source_root` from `config/pipeline.yaml`. Reject if neither resolves.
 2. **Run the chunker.** Invoke [scripts/chunk.py](./scripts/chunk.py):
    ```powershell
    python .github/skills/cobol-chunking/scripts/chunk.py `
@@ -67,7 +67,7 @@ Chunk `kind` values, by `source_kind`:
    ```
    Flags:
    - `--output <path>` — override the default `docs/_shared/<basename-with-ext>/chunk-manifest.json`.
-   - `--source-root <root>` — override `sources.yaml::source_root`.
+   - `--source-root <root>` — override `pipeline.yaml::source_root`.
   - `--kind-hint cobol|cl|jcl|copybook|bms|proc|auto` — force a kind when auto-detection is wrong.
 3. **Validate.** The script self-validates against [schemas/outputs.schema.json](./schemas/outputs.schema.json) when `jsonschema` is installed (`pip install jsonschema pyyaml`). On schema failure: exit code `3`, error on stderr, **no manifest written**.
 4. **Spot-check.** Compare the shape against [samples/DEMO100.expected.manifest.json](./samples/DEMO100.expected.manifest.json) for the bundled fixture [samples/DEMO100.sample.cbl](./samples/DEMO100.sample.cbl). Confirm:
@@ -97,7 +97,7 @@ Useful parameters:
 - `-ExcludeExtensions <string[]>` — case-insensitive extensions skipped when expanding `-Paths`. Default: `.cob, .inp, .itt`. Pass `@()` to disable. Does not filter `-Files` or `-Manifest` entries.
 
 **Default exclusions when expanding `-Paths`.** The runner skips `.COB`, `.INP`, and `.ITT` files by default because they are referenced — not chunked — by the pipeline:
-- `*.COB` files (typically under `COBOL/COPY/`) are copybooks resolved via `sources.yaml::copybook_search_paths`, not standalone programs. This mirrors the `COBOL/COPY/**` exclusion in `config/sources.yaml`.
+- `*.COB` files (typically under `COBOL/COPY/`) are copybooks resolved via `pipeline.yaml::copybook_search_paths`, not standalone programs. This mirrors the `COBOL/COPY/**` exclusion in `config/pipeline.yaml`.
 - `*.INP` and `*.ITT` files are JCL inline-data / include members consumed by reference from their parent `.JCL` / `.PRC` job; chunking them in isolation produces no useful job/step structure.
 Use `-Files` (or `-Manifest`) to chunk one of these explicitly when needed, or override `-ExcludeExtensions` to change the filter set.
 

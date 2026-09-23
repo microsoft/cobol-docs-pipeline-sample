@@ -101,6 +101,7 @@ sys.stdout.write("\n".join(str(group["id"]).strip() for group in groups if str(g
 case "${phase}" in
   D)
     dispatch scripts/dispatchers/run-docs-copilot-batch.sh "${selectors[@]}" -EnsureBundles \
+      -Languages "${languages}" \
       -Agent "${agent:-section-doc-writer}" -Throttle "${dispatch_throttle}" \
       -ResultsXml "${results_dir}/copilot_doc_results.xml" "${dispatch_flags[@]}"
     ;;
@@ -108,7 +109,7 @@ case "${phase}" in
     skill .github/skills/section-doc-finalizer/scripts/finalize_stage_batch.sh "${selectors[@]}" \
       -Languages "${languages}" -Throttle "${throttle}" -ResultsXml "${results_dir}/finalize_stage_results.xml"
     dispatch scripts/dispatchers/run-docs-finalize-batch.sh "${selectors[@]}" -Languages "${languages}" \
-      -Agent "${agent:-section-doc-finalizer}" -Throttle "${dispatch_throttle}" \
+      -Agent "${agent:-section-doc-finalizer}" -Throttle "${finalizer_throttle}" \
       -ResultsXml "${results_dir}/copilot_finalize_results.xml" "${dispatch_flags[@]}"
     ${dry_run} || skill .github/skills/section-doc-finalizer/scripts/assemble_complete_batch.sh \
       "${selectors[@]}" -Languages "${languages}" -Throttle "${throttle}" \
@@ -184,7 +185,7 @@ case "${phase}" in
         -ResultsXml "${results_dir}/copilot_fa_group_section_results.xml" "${dispatch_flags[@]}"
     fi
     dispatch "${dispatcher}" -Manifest "${grouping_manifest}" -Languages "${languages}" \
-      -Throttle "${dispatch_throttle}" \
+      -Throttle "${finalizer_throttle}" \
       -ResultsXml "${results_dir}/group_${phase}_results.xml" "${dispatch_flags[@]}"
     case "${phase}" in
       I) group_docx complete.md group_complete_docx_results.xml ;;
@@ -198,7 +199,7 @@ case "${phase}" in
       "${selectors[@]}" -Languages "${languages}" \
       -Throttle "${throttle}" -ResultsXml "${results_dir}/ta_stage_results.xml" "${profile_flags[@]}"
     dispatch scripts/dispatchers/run-docs-ta-finalize-batch.sh "${selectors[@]}" -Languages "${languages}" \
-      -Throttle "${dispatch_throttle}" -ResultsXml "${results_dir}/ta_finalize_results.xml" "${dispatch_flags[@]}"
+      -Throttle "${finalizer_throttle}" -ResultsXml "${results_dir}/ta_finalize_results.xml" "${dispatch_flags[@]}"
     source_docx technical-analysis.md ta_docx_results.xml
     ;;
   N)

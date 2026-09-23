@@ -1,0 +1,128 @@
+name: default
+version: "1.0"
+document_type: technical-requirements
+
+identifier_lock_regex: "[A-Z][A-Z0-9-]*(\\.[A-Z0-9-]+)?"
+functional_id_prefix: REQ
+non_functional_id_prefix: NFR
+id_padding: 3
+
+front_matter:
+  title_pattern: "Technical requirements — {{PROGRAM_ID}}"
+  show_classification: true
+  show_metadata_table: true
+  classification:
+    default: Internal
+  state_options:
+    - DRAFT
+  template_version: "1.0"
+
+sections:
+  - id: header
+    title: Technical requirements
+    required: true
+
+  - id: context
+    number: "1"
+    title: Context and objectives
+    required: true
+    min_paragraphs: 1
+
+  - id: stakeholders
+    number: "2"
+    title: Stakeholders
+    required: false
+    optional_marker: "No source-backed stakeholders were identified."
+
+  - id: in-scope
+    number: "3"
+    title: In scope
+    required: true
+    min_paragraphs: 1
+
+  - id: out-of-scope
+    number: "4"
+    title: Out of scope
+    required: false
+    optional_marker: "No source-backed exclusions were identified."
+
+  - id: assumptions-dependencies
+    number: "5"
+    title: Assumptions and dependencies
+    required: false
+    optional_marker: "No source-backed assumptions or dependencies were identified."
+
+  - id: functional-requirements
+    number: "6"
+    title: Functional requirements
+    required: true
+    min_count: 1
+    per_requirement_subsection: true
+    render_mode: narrative-then-table
+    fields:
+      - Statement
+      - Rationale
+      - Source citations
+      - Dependencies
+      - Acceptance criteria
+      - Confidence
+
+  - id: non-functional-requirements
+    number: "7"
+    title: Non-functional requirements
+    required: false
+    optional_marker: "No source-backed non-functional requirements were identified."
+    per_requirement_subsection: true
+    render_mode: narrative-then-table
+    fields:
+      - Statement
+      - Rationale
+      - Source citations
+      - Dependencies
+      - Acceptance criteria
+      - Confidence
+
+  - id: data-requirements
+    number: "8"
+    title: Data requirements
+    required: false
+    optional_marker: "No source-backed data requirements were identified."
+
+  - id: integration-requirements
+    number: "9"
+    title: Integration requirements
+    required: false
+    optional_marker: "No source-backed integration requirements were identified."
+
+  - id: acceptance-criteria
+    number: "10"
+    title: Acceptance criteria
+    required: false
+    optional_marker: "No additional source-backed acceptance criteria were identified."
+
+  - id: traceability
+    number: "11"
+    title: Traceability
+    required: false
+    optional_marker: "No additional source-backed traceability links were identified."
+
+  - id: risks
+    number: "12"
+    title: Risks
+    required: false
+    optional_marker: "No source-backed risks were identified."
+
+  - id: open-questions
+    number: "13"
+    title: Open questions
+    required: false
+    optional_marker: "No source-backed open questions were identified."
+
+  - id: change-log
+    number: "14"
+    title: Change log
+    required: false
+    optional_marker: "No change history is available."
+
+footer:
+  text: "Generated from source-backed pipeline evidence."

@@ -1,13 +1,17 @@
-# Source configuration for the COBOL/CL/JCL reverse-engineering pipeline.
-# Validated by config/sources.schema.json.
+# Shared configuration for the COBOL/CL/JCL reverse-engineering pipeline.
+# Validated by config/pipeline.schema.json.
 #
 # This file tells every agent WHERE the source code lives, WHICH files to
 # process, HOW to decode them, WHICH doc profiles to render, and WHICH
 # modernization targets to emit artifacts for.
 
-# Absolute path to the folder containing the COBOL/JCL sources.
+# Absolute path, or path relative to this repository root, containing the
+# COBOL/JCL sources. A Windows absolute path must be quoted and should use
+# forward slashes, for example: "D:/Customers/Acme/legacy-sources".
 # Sources are NEVER copied into this repo; agents read them by reference.
-# For local testing, you can point this at the bundled `samples/` folder.
+# Pipeline discovery and explicit selectors both apply the include/exclude
+# rules below to files located under this root.
+# For local testing, you can point this at one of the bundled `repos/` folders.
 source_root: "./repos/sample"
 
 # Include / exclude globs (relative to source_root). Evaluated in order.
@@ -26,11 +30,14 @@ include:
 
 exclude:
   - "**/archive/**"
+  - "**/Backup/**"
   - "**/old/**"
+  - "**/backup/**"
+  - "**/Copy/**"
+
   # samples/COBOL/COPY/*.COB are copybooks (despite the .COB extension),
   # not full programs. Exclude them from the main pipeline; they are
   # consumed by reference via copybook_search_paths.
-  - "COBOL/COPY/**"
 
 # Per-file encoding override. Keys are globs (relative to source_root).
 # Use "auto" to delegate detection to the cobol-chunking skill.
@@ -63,34 +70,43 @@ platforms:
 functional_analysis_profile: "default"
 requirements_profile: "default"
 
+# Documentation output languages for scripts/run-pipeline.ps1 and .sh.
+# Use [it] for Italian only, or [en, it] for English + Italian.
+# Override for one run with -Languages en,it, or with a phase language option.
+# This is unrelated to modernization.target_languages (java/dotnet).
+output:
+  languages: [it]
+  # Select file AND group outputs for a normal run (omitted keys default to true).
+  # Analyses automatically generate their prerequisite docs; group functional
+  # analysis also uses requirements. docs controls overview diagrams as well.
+  # Any enabled output builds the portal. All false means no work.
+  # Explicit -Phases or -From/-To overrides this selection without adding prerequisites.
+  # -Skip and legacy Run* switches are applied last. Existing outputs are not deleted.
+  generate:
+    docs: true
+    functional_analysis: true
+    requirements: true
+    technical_analysis: true
+
 # Copybook search paths (resolved relative to source_root).
 copybook_search_paths:
   - "COBOL/COPY"
   - "QCPYSRC"
   - "copybooks"
 
-# Pipeline execution model — drives the orchestrator and `scripts/run-pipeline.ps1`.
-#
-# `execution_mode`:
-#   - `per-file-loop` (default): loop over every source file and run all
-#     file-scoped phases (those with `runs_in: per-file-loop` in
-#     `config/pipeline-dag.yaml`) end-to-end for that file before moving
-#     to the next. After every file has completed the per-file loop, the
-#     workspace-scoped phases (`runs_in: workspace`) run once in DAG order.
-#   - `per-phase`: legacy mode — run every phase across all files in DAG
-#     order (A over all files, then B over all files, …). Kept for
-#     debugging / reproducibility against earlier runs.
-#
-# `per_file_parallelism`:
-#   Maximum number of files processed concurrently when
-#   `execution_mode: per-file-loop`. `1` = strict sequential (one file
-#   end-to-end at a time, default). `>1` enables N parallel per-file
-#   threads — each thread owns one file and executes its file-scoped
-#   phases independently. Workspace-scoped phases always run
-#   sequentially after the loop joins.
+# Public runners execute phases sequentially, with parallel workers within each stage.
+# Copilot concurrency: 1-32; CLI -CopilotThrottle overrides this shared default.
+# execution_mode/per_file_parallelism are declarative orchestrator settings;
+# neither they nor pipeline-dag.yaml max_parallel control the public runners.
 pipeline:
+  copilot_parallelism: 16
   execution_mode: "per-file-loop"
   per_file_parallelism: 1
+
+# -CopilotModel overrides this default. Omit default_model to use each agent's
+# model frontmatter, then Copilot automatic selection. Use CLI model IDs here.
+copilot:
+  default_model: "claude-sonnet-4.5"
 
 # Modernization configuration — drives the file/group modernizer agents and
 # the cobol-to-target-mapping skill.

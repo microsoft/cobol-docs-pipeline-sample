@@ -26,8 +26,8 @@ import yaml
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
 DEFAULT_DOC_ROOT = REPO_ROOT / "docs" / "_shared"
-SOURCES_YAML = REPO_ROOT / "config" / "sources.yaml"
-DEFAULT_PROFILE = REPO_ROOT / "config" / "templates" / "docs" / "functional-analysis" / "default" / "profile.yaml"
+SOURCES_YAML = REPO_ROOT / "config" / "pipeline.yaml"
+DEFAULT_PROFILE = REPO_ROOT / "config" / "templates" / "section-doc.profile.yaml"
 TEMPLATES_ROOT = REPO_ROOT / "config" / "templates"
 GLOSSARY_PATH = REPO_ROOT / "docs" / "_glossary.md"
 
@@ -145,13 +145,7 @@ def find_chunk_filename(chunks_index: dict, chunk_id: str) -> str:
 
 def parse_languages(value: str) -> list[str]:
     parts = [p.strip().lower() for p in (value or "en").split(",") if p.strip()]
-    if not parts:
-        return ["en"]
-    # EN always first; preserve user-specified order for the rest.
-    if "en" in parts:
-        rest = [p for p in parts if p != "en"]
-        return ["en", *rest]
-    return ["en", *parts]
+    return list(dict.fromkeys(parts))
 
 
 def build_glossary_info() -> dict:
@@ -180,7 +174,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Package phase-C section-doc inputs into a deterministic JSON bundle.")
     ap.add_argument("--source", required=True)
     ap.add_argument("--chunk-id", required=True)
-    ap.add_argument("--languages", default="en", help="comma-separated; EN is always included and listed first")
+    ap.add_argument("--languages", default="en", help="exact comma-separated output languages; default: en")
     ap.add_argument("--source-root", default=None)
     ap.add_argument("--manifest", default=None)
     ap.add_argument("--profile", default=None)

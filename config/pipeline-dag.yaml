@@ -8,10 +8,10 @@
 #
 # EXECUTION MODEL
 # ----------------
-# The orchestrator reads `pipeline.execution_mode` from config/sources.yaml.
+# The orchestrator reads `pipeline.execution_mode` from config/pipeline.yaml.
 #
 # `per-file-loop` (default):
-#   1. Loop over every source file from config/sources.yaml.
+#   1. Loop over every source file from config/pipeline.yaml.
 #      Each iteration runs ALL phases marked `runs_in: per-file-loop`
 #      end-to-end for that file (A → B(per-file) → C → D → E).
 #      Up to `pipeline.per_file_parallelism` file iterations may run
@@ -72,7 +72,7 @@ templates:
 # may override via their own `max_parallel`. This is the in-phase fan-out
 # cap (e.g. per-section subagents within a single file). The orthogonal
 # per-file thread count is controlled by `pipeline.per_file_parallelism`
-# in config/sources.yaml.
+# in config/pipeline.yaml.
 max_parallel: 1
 
 phases:
@@ -87,7 +87,7 @@ phases:
     # pass — schema validation is the gate.
     agents:
       - name: cobol-chunker
-        inputs: ["<file>", "config/sources.yaml::<platform|platforms>"]
+        inputs: ["<file>", "config/pipeline.yaml::<platform|platforms>"]
         outputs: ["docs/_shared/<file>/chunk-manifest.json"]
         scripts:
           - "skills/cobol-chunking/scripts/chunk.py"

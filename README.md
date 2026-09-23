@@ -40,6 +40,16 @@ python -m pip install pyyaml jsonschema markdown pymdown-extensions
 Phases D–M additionally require an authenticated GitHub Copilot CLI. Install pandoc only
 when Word (`.docx`) output is required.
 
+Configure `source_root`, `include`, `exclude`, and `output.generate` in
+`config/pipeline.yaml`. A run of the configured deliverables then requires no source arguments:
+
+```powershell
+pwsh -NoProfile -File scripts/run-pipeline.ps1
+```
+
+Use `-SourceRoot <folder>` for a temporary root override, or `-Paths <folder1>,<folder2>` with
+`-SourceRoot <common-root>` to process selected folders recursively.
+
 ### 2. Run the mainframe deterministic smoke test
 
 Windows PowerShell:
@@ -133,10 +143,7 @@ pwsh -NoProfile -File scripts/run-pipeline.ps1 `
   -Files repos/sample/COBOL/ORDR100.CBL `
   -SourceRoot repos/sample `
   -Skip I,J,K,M,N `
-  -SectionFinalizerLanguages en,it `
-  -RequirementsLanguages en,it `
-  -FunctionalAnalysisLanguages en,it `
-  -TechnicalAnalysisLanguages en,it `
+  -Languages en,it `
   -MaxPhaseRetries 3
 ```
 
@@ -147,10 +154,7 @@ bash scripts/run-pipeline.sh \
   -Files repos/sample/COBOL/ORDR100.CBL \
   -SourceRoot repos/sample \
   -Skip I,J,K,M,N \
-  -SectionFinalizerLanguages en,it \
-  -RequirementsLanguages en,it \
-  -FunctionalAnalysisLanguages en,it \
-  -TechnicalAnalysisLanguages en,it \
+  -Languages en,it \
   -MaxPhaseRetries 3
 ```
 
@@ -310,8 +314,8 @@ deploys through the official GitHub Pages actions. In the repository settings, s
 - **Audit-ready & verifiable** — every prose claim is cited to exact source line ranges and
   mechanically checked, so reviewers can trust and trace the documentation rather than
   re-reading the COBOL.
-- **Bilingual by construction** — EN + IT (or more) are co-authored together, so the same
-  knowledge serves both international engineers and local stakeholders.
+- **Requested languages only** — one language or several (for example EN + IT) are authored
+  directly, with no mandatory English edition or translation intermediate.
 - **Consistent & repeatable** — every program is documented to the same templates/profiles,
   so a 1,700-artifact estate reads uniformly and can be regenerated as the code evolves.
 
@@ -369,7 +373,7 @@ flowchart LR
   E --> F[F requirements]
   F --> G[G functional-analysis]
   E --> H[H diagrams]
-  G --> L[L technical-analysis + docx]
+  E --> L[L technical-analysis + docx]
 
   E --> I[I group docs]
   F --> J[J group requirements]
@@ -377,6 +381,7 @@ flowchart LR
   G --> K[K group FA]
   J --> K
   L --> M[M group TA + docx]
+  I --> M
 
   L --> N[N portal]
   M --> N
@@ -568,7 +573,7 @@ LLM phases vary but are gated and resumable.
   record, its source text, its facts slice, the kind-matching template link, profile thresholds,
   and the authoritative output paths.
 - **Author (LLM):** for each chunk the agent reads **only** the bundle MD and co-authors
-  `docs/<lang>/<file>/sections/<chunk_id>.md` for EN + every target language, plus the
+  `docs/<lang>/<file>/sections/<chunk_id>.md` for exactly the requested languages, plus the
   per-section `docs/_shared/<file>/diagrams/section-<chunk_id>.mmd`. Templates are selected by
   chunk kind (paragraph/section, division, data-record, JCL, …). Output must follow the
   template, cite via `[^src-N]` footnotes, backtick identifiers, and fully populate the
@@ -644,7 +649,7 @@ LLM phases vary but are gated and resumable.
 ### Phase L — Technical analysis (ATE) + DOCX · _hybrid, single-pass_
 
 - **Skill/agent:** [technical-analysis-writer](.github/skills/technical-analysis-writer/) + agent.
-- **Single-pass (no per-section drafts):** the consolidated `docs/en/<file>/complete.md` is the
+- **Single-pass (no per-section drafts):** the first requested language's consolidated `docs/<lang>/<file>/complete.md` is the
   **only** narrative input (never `functional-analysis.md`). `ta_profile_resolver.py` resolves the
   profile (the `default`, *application*, or *interface* profile; copybooks/BMS skip).
 - **Author (LLM):** reorganizes `complete.md` into the TA template structure, co-authoring
@@ -672,7 +677,7 @@ LLM phases vary but are gated and resumable.
 ## Worked example: one COBOL program end-to-end
 
 Following an example program `repos/<source-root>/COBOL/PROG1.CBL` through the pipeline
-(`<source-root>` is the directory configured in [config/sources.yaml](config/sources.yaml)):
+(`<source-root>` is the directory configured in [config/pipeline.yaml](config/pipeline.yaml)):
 
 ```powershell
 pwsh -NoProfile -File scripts/run-pipeline.ps1 -Files repos/<source-root>/COBOL/PROG1.CBL `
@@ -808,7 +813,7 @@ only the declared output paths, never re-read `facts.json` / `chunk-manifest.jso
 slices, and finish with one terse `DONE …` line** (no narration). Agent front matter is the
 source of truth for model routing: authoring agents currently use `Auto (copilot)`, while the
 lightweight section reviewer uses `MAI-Code-1-Flash (copilot)`. Multi-language writers
-co-author EN + every target language in a single call.
+author exactly the requested languages in a single call.
 
 | Agent | Phase | Scope | Model | What it does |
 |-------|-------|-------|-------|--------------|
@@ -880,6 +885,25 @@ Per-deliverable checkers: `check-section-doc.py`, `check-requirements.py`,
 `check-functional-analysis.py`, `check-group-doc.py`, `check-group-requirements.py`,
 `check-group-functional-analysis.py`, and the per-file `review-section-set.py`.
 
+To review a complete source after section authoring:
+
+```powershell
+python .github/skills/qa-reviewer/scripts/review-section-set.py `
+  --source repos/sample/COBOL/ATCCDLGH.CBL
+```
+
+The [section sweep](.github/skills/qa-reviewer/scripts/review-section-set.py) reads
+`output.languages` from [config/pipeline.yaml](config/pipeline.yaml); use
+`--languages it,en` to override. Empty/invalid language lists are errors. The sweep
+requires every indexed section in every requested language and its staged bundle;
+missing or orphan documents cannot produce a successful QA result. Bundles are
+passed to the checker so incoming-reference checks are included. Source/bundle
+staleness and current checker diagnostics are reported without reusing old findings.
+Exit codes are `0` success, `1` content/checker failure, `2` invalid CLI/config,
+`4` missing/invalid prerequisites, and `5` stale inputs (`4` takes precedence over
+`5`, then `1`, when child failures differ). Existing unrequested language outputs
+are left untouched.
+
 ---
 
 ## Profiles and templates
@@ -911,14 +935,67 @@ truth for shared domain terms.
 
 ## Languages and co-authoring
 
-**English is the source-of-truth language.** Where target languages are configured
-(e.g. `en,it`), each writer agent **co-authors EN + every target language in the same LLM
-call**, so non-English trees are first-class rather than machine-translated afterthoughts. A
-translator fallback only runs to repair a missing or drifted sibling. Output trees are
+**Generate exactly the requested documentation languages.** Each writer agent follows
+`bundle.languages` and `bundle.output_paths`; `output.languages: [it]` generates Italian
+only, with no implicit English edition or English intermediate. When multiple languages
+are requested (e.g. `en,it`), they are co-authored in the same LLM call and checked for
+structural parity. A translator fallback may repair only missing or drifted requested
+siblings; it must not add unrequested languages. Output trees are
 `docs/<lang>/<file>/…` and `docs/<lang>/_groups/<group>/…`.
 
-Set languages per phase, e.g. `-FunctionalAnalysisLanguages en,it`,
-`-RequirementsLanguages en,it`, `-TechnicalAnalysisLanguages en,it`, `-GroupLanguages en,it`.
+Set the default once in [config/pipeline.yaml](config/pipeline.yaml). The current
+configuration requests Italian only:
+
+```yaml
+output:
+  languages: [it]
+```
+
+When no language is specified, the fallback is `[en]`. Both public runners read this setting for **all
+documentation authoring phases**, including **D (section generation)**. No separate
+output YAML file is needed. This setting is unrelated to `modernization.target_languages`,
+which selects programming languages (`java` / `dotnet`), not documentation languages.
+
+Override it for a single run:
+
+```powershell
+pwsh -File scripts/run-pipeline.ps1 -Languages en,it
+```
+
+```bash
+bash scripts/run-pipeline.sh -Languages en,it
+```
+
+Precedence: **explicit phase option > `-Languages` > `output.languages` > `en`**.
+Codes are normalized to lowercase and duplicates removed while preserving requested
+order. No language is added: `-Languages it` means Italian only, and `it,en,it` becomes
+`it,en`. Empty or malformed language lists fail before any phase starts.
+
+The first requested language supplies the staged source narrative for file
+requirements/functional/technical analysis and group deliverables; it need not be English.
+Section finalization uses each output language's own `toc[].summaries[lang]`.
+
+| Phase override | Applies to |
+|---|---|
+| `-SectionFinalizerLanguages en,it` | **D and E**: section generation and file index/complete finalization |
+| `-RequirementsLanguages en,it` | F: file requirements |
+| `-FunctionalAnalysisLanguages en,it` | G: file functional analysis |
+| `-TechnicalAnalysisLanguages en,it` | L: file technical analysis |
+| `-GroupLanguages en,it` | I/J/K/M: all group deliverables |
+
+Prefer the shared setting so downstream phases have matching-language source documents.
+Standalone phase scripts retain their `-Languages` option and English default; the public
+runners resolve the YAML setting and forward it to those scripts.
+
+Language-neutral diagrams and bundles remain under `docs/_shared/`; they are not
+duplicated for each language. English headings in a template do not request English
+output: existing localization rules still apply to the selected language.
+
+Changing the setting does not translate existing output in place: rerun from **D** (with
+A-C prerequisites already present) to regenerate section bundles and downstream documents.
+Unselected language trees are not deleted. The static portal currently publishes **English
+and Italian only** and shows languages with actual rendered documents; other codes can be
+used for authoring, but do not yet have portal support.
 
 ---
 
@@ -949,18 +1026,46 @@ grouping manifest, not by the `-Files`/`-Paths` source selectors.
 
 ## Execution model
 
-Set in [config/sources.yaml](config/sources.yaml) under `pipeline:`.
+### Copilot model
 
-- **`per-file-loop` (default)** — loop over every source file and run all file-scoped phases
-  (`runs_in: per-file-loop`) end-to-end for that file, then run the workspace-scoped phases
-  once after the loop joins. `per_file_parallelism` controls how many files run concurrently
-  (`1` = strict sequential).
-- **`per-phase` (legacy)** — run every phase across all files in DAG order (A over all files,
-  then B over all files, …). Kept for reproducibility against earlier runs.
+The shared default in [config/pipeline.yaml](config/pipeline.yaml) is:
 
-Note the **deferred workspace step**: the per-file phase B contains a `workspace`-scope agent
-(the incoming-xref pass) that is deferred and run **once** after every file has cleared phase
-B, so cross-file caller edges are complete.
+```yaml
+copilot:
+  default_model: "claude-sonnet-4.5"
+```
+
+Selection precedence is **`-CopilotModel` > `copilot.default_model` > agent
+`model:` frontmatter > Copilot automatic selection**. Both public runners accept
+`-CopilotModel <model-id>`; `-CopilotModel auto` explicitly requests automatic
+selection. Remove `default_model` to retain agent-specific defaults. Use CLI model
+IDs in configuration, not IDE display names.
+
+```powershell
+pwsh -File scripts/run-pipeline.ps1 -CopilotModel claude-sonnet-4.5 -CopilotThrottle 32
+```
+
+The same options work with `bash scripts/run-pipeline.sh`. Model availability
+depends on the installed CLI and your account; configuration does not grant access.
+See [model configuration](site-docs/guides/configuration.md#copilot-model).
+
+### Concurrency
+
+Both public runners execute selected phases sequentially across the selected source set.
+Workers within each stage run concurrently; prerequisite and group fan-in boundaries stay intact.
+Phase B finishes facts extraction before running its workspace incoming-xref pass.
+
+Set `pipeline.copilot_parallelism: 16` in [config/pipeline.yaml](config/pipeline.yaml) to
+control all Copilot stages D-M. The fallback is **16**, with a supported range of **1-32**.
+Use `-CopilotThrottle 32` for a higher-throughput run or a lower value for limited RAM or
+service quotas. Explicit `-CopilotDocsThrottle`, `-SectionFinalizerThrottle`, and
+`-DiagramsThrottle` override D, E, and H respectively. `-Throttle` remains independent
+and controls deterministic batch workers.
+
+The declarative orchestrator keys `execution_mode`, `per_file_parallelism`, and DAG
+`max_parallel` do **not** control either public runner. Standalone phase/dispatcher scripts
+retain their own defaults; YAML and shared CLI concurrency are resolved by the public runners.
+See [concurrency configuration](site-docs/guides/configuration.md#execution-settings).
 
 ---
 
@@ -985,7 +1090,8 @@ B, so cross-file caller edges are complete.
 
 | File | Purpose |
 |------|---------|
-| [config/sources.yaml](config/sources.yaml) | Source root, include/exclude globs, encodings, mainframe/IBM i platform selection, default profiles, copybook search paths, execution model, modernization targets |
+| [config/pipeline.yaml](config/pipeline.yaml) | Source root, include/exclude globs, encodings, mainframe/IBM i platform selection, default profiles, exact documentation languages and output selection, copybook search paths, execution model, modernization targets |
+| [config/pipeline.schema.json](config/pipeline.schema.json) | Pipeline configuration schema, including `output.languages` and the four Boolean `output.generate` keys |
 | [config/pipeline-dag.yaml](config/pipeline-dag.yaml) | Full DAG: phases, agents, scopes, dependencies, execution waves (validated by `config/pipeline-dag.schema.json`) |
 | [config/grouping.yaml](config/grouping.yaml) | Manual group declarations for phases I/J/K/M |
 | [config/glossary.yaml](config/glossary.yaml) | Central IT↔EN domain glossary (rendered to `docs/_glossary.md`) |
@@ -1094,13 +1200,14 @@ smoke tests in [Quick start](#quick-start).
 
 ### Common variants
 
-Run selected phases against your own source:
+Run per-file requirements and their prerequisites against your own source
+(explicit selections do not add prerequisites or portal N automatically):
 
 Windows PowerShell:
 
 ```powershell
 pwsh -NoProfile -File scripts/run-pipeline.ps1 `
-  -Phases A,B,C,F `
+  -Phases A,B,C,D,E,F `
   -Files repos/<source-root>/COBOL/PROG1.CBL `
   -SourceRoot repos/<source-root>
 ```
@@ -1109,7 +1216,7 @@ Linux/macOS Bash:
 
 ```bash
 bash scripts/run-pipeline.sh \
-  -Phases A,B,C,F \
+  -Phases A,B,C,D,E,F \
   -Files repos/<source-root>/COBOL/PROG1.CBL \
   -SourceRoot repos/<source-root>
 ```
@@ -1195,11 +1302,58 @@ absent file.
 **Source selection** — `-Files <string[]>`, `-Paths <string[]>`, `-Manifest <string>`,
 `-SourceRoot <string>`.
 
-**Execution** — `-Throttle <int>`, `-ResultsDir <string>`, `-MaxPhaseRetries <int>`
+**Execution** — `-CopilotModel <model-id|auto>`, `-Throttle <int>` (deterministic workers), `-CopilotThrottle <1-32>`
+(shared LLM concurrency; YAML default or 16), `-ResultsDir <string>`, `-MaxPhaseRetries <int>`
 (default `3`; `0` disables phase retries).
 
 **Phase selection** — `-Phases <A,B,…>`, `-From <id>`, `-To <id>`, `-Skip <id[]>`.
-When `-Phases` is given, `-From` / `-To` / `-Skip` are ignored.
+Without explicit phase selectors, both public runners use `output.generate` in
+`config/pipeline.yaml` and add the prerequisites listed below. Explicit `-Phases`
+takes precedence over `-From` / `-To`. Either `-Phases` or an explicitly supplied
+`-From` or `-To` bypasses YAML output selection and does **not** auto-add prerequisites.
+Legacy `Run*` false values and `-Skip` are applied last to every selection; removed
+prerequisites are not repaired.
+
+### Configured deliverables
+
+`config/pipeline.yaml` is validated by `config/pipeline.schema.json`. This is a
+configuration rename, not a compatibility alias; no copy at the old configuration
+path is retained.
+
+```yaml
+output:
+  languages: [it]
+  generate:
+    docs: true
+    functional_analysis: true
+    requirements: true
+    technical_analysis: true
+```
+
+Each `output.generate` key is a Boolean and defaults to `true` when omitted.
+Keys select both per-file and per-group artifacts, not separate scopes. With no
+explicit phase selectors, the selected set is the union of enabled outputs and
+their prerequisites:
+
+| Enabled key | Requested phases | Automatically included prerequisites |
+|---|---|---|
+| `docs` | D/E/H/I | A/B/C |
+| `requirements` | F/J | A/B/C/D/E/I |
+| `functional_analysis` | G/K | A/B/C/D/E/F/I/J |
+| `technical_analysis` | L/M | A/B/C/D/E/I; no requirements or functional analysis |
+
+Any enabled output also selects portal N. Under YAML selection, overview diagrams
+H are selected only when `docs: true`; D's shared section diagrams may still be
+produced as documentation prerequisites. All four keys set to `false` means no
+work, including no source discovery and no portal build.
+
+Disabling an output does not prevent its artifacts from being generated as
+prerequisites of another enabled output. Existing outputs are never deleted by
+these flags, and the portal may continue to display older documents. PowerShell
+and Bash use the same contract. Explicit selections bypass this table; `-Skip`
+and legacy false toggles still apply last without adding removed phases back.
+
+### Additional options
 
 **Legacy toggles** (all default `$true`): `-RunWorkspaceXrefPass`, `-RunCopilotDocs` (drops D),
 `-RunSectionFinalizer` (drops E), `-RunFunctionalAnalysis` (drops G), `-RunDiagrams` (drops H),
@@ -1214,6 +1368,11 @@ When `-Phases` is given, `-From` / `-To` / `-Skip` are ignored.
 **Phase D/E** — `-CopilotDocsAgent`, `-CopilotDocsThrottle`, `-CopilotDocsDryRun`,
 `-SectionFinalizerLanguages`, `-SectionFinalizerAgent`, `-SectionFinalizerThrottle`,
 `-SectionFinalizerDryRun`, `-SectionFinalizerForce`.
+
+**Documentation languages** — `-Languages en,it` sets the shared default for D/E/F/G/I/J/K/L/M.
+When omitted, `output.languages` in [config/pipeline.yaml](config/pipeline.yaml) is used.
+The phase language overrides below take precedence; `-SectionFinalizerLanguages` covers
+both section generation (D) and finalization (E).
 
 **Phase F/G** — `-RequirementsLanguages`, `-RequirementsProfile`, `-RequirementsPrune`,
 `-RequirementsForce`, `-FunctionalAnalysisLanguages`, `-FunctionalAnalysisProfile`,
@@ -1290,7 +1449,7 @@ for ownership and extension rules.
 | [.github/agents/](.github/agents/) | Copilot agent definitions used by the LLM phases |
 | [.github/workflows/ci-sample.yml](.github/workflows/ci-sample.yml) | Complete GitHub Actions CI sample |
 | [.ado/CI-Sample.yml](.ado/CI-Sample.yml) | Complete Azure DevOps pipeline sample |
-| [repos/](repos/) | Mainframe and IBM i source trees — COBOL / CBLLE / SQLCBLLE / JCL / PROC / copybook / BMS (path set in `config/sources.yaml`) |
+| [repos/](repos/) | Mainframe and IBM i source trees — COBOL / CBLLE / SQLCBLLE / JCL / PROC / copybook / BMS (path set in `config/pipeline.yaml`) |
 | [repos/sample-as400/](repos/sample-as400/) | Original IBM i sample with CLLE, CBLLE, SQLCBLLE, DB2 for i, and a source manifest |
 | [tests/](tests/) | Python `unittest` suite and deterministic fixtures |
 
@@ -1444,7 +1603,7 @@ before resuming a long or interrupted batch.
 - Agent definitions: [.github/agents/*.agent.md](.github/agents/) — LLM authoring roles.
 - DAG spec: [config/pipeline-dag.yaml](config/pipeline-dag.yaml) and its
   `config/pipeline-dag.schema.json`.
-- Source / grouping config: [config/sources.yaml](config/sources.yaml),
+- Pipeline / grouping config: [config/pipeline.yaml](config/pipeline.yaml),
   [config/grouping.yaml](config/grouping.yaml).
 
 ---

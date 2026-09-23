@@ -43,7 +43,7 @@ DOCS_ROOT = REPO_ROOT / "docs"
 PORTAL_ROOT = DOCS_ROOT / "_portal"
 SITE_ROOT = PORTAL_ROOT / "site"
 SHARED_ROOT = DOCS_ROOT / "_shared"
-SOURCE_CONFIG_PATH = REPO_ROOT / "config" / "sources.yaml"
+SOURCE_CONFIG_PATH = REPO_ROOT / "config" / "pipeline.yaml"
 DEFAULT_SOURCE_ROOT = REPO_ROOT / "repos" / "sample1"
 SOURCES_SITE_DIR = "_sources"
 LANGS = ("en", "it")
@@ -717,11 +717,18 @@ window.addEventListener('DOMContentLoaded', function(){
     if (layout) layout.appendChild(panel);
   }
   
-  // Highlight active sidebar entry & auto-expand ancestors
-  var here = location.pathname.split('/').pop();
+  // Highlight the exact current page, not every page with the same filename.
+  var here = new URL(location.href);
   document.querySelectorAll('.sidebar a').forEach(function(a){
-    if (a.getAttribute('href') && a.getAttribute('href').split('/').pop() === here) {
+    var target;
+    try {
+      target = new URL(a.href, document.baseURI);
+    } catch (e) {
+      return;
+    }
+    if (target.origin === here.origin && target.pathname === here.pathname) {
       a.classList.add('active');
+      a.setAttribute('aria-current', 'page');
       var p = a.parentElement;
       while (p) {
         if (p.tagName === 'DETAILS') p.open = true;
