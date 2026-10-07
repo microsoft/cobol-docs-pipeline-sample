@@ -393,6 +393,7 @@ build_phase_args() {
       ${technical_force} && output_ref+=(-Force)
       ;;
     N)
+      output_ref+=(-Languages "${section_languages},${requirements_languages},${functional_languages},${technical_languages},${group_languages}")
       [[ -n "${source_root}" ]] && output_ref+=(-SourceRoot "${source_root}")
       ${portal_skip_build} && output_ref+=(-SkipBuild)
       [[ -n "${portal_site}" ]] && output_ref+=(-Site "${portal_site}")
@@ -444,6 +445,11 @@ for phase in "${selected[@]}"; do
     printf '%s\n' \
       "--- Phase ${phase}: attempt ${attempt_number}/${max_attempts} completed | exit=${exit_code} | elapsed=${attempt_elapsed}s ---"
     ((exit_code == 0)) && break
+    if ((exit_code == 4)); then
+      printf 'Phase %s: retry skipped (missing prerequisite, exit=4).\n' "${phase}" >&2
+      printf '=== Pipeline aborted at phase %s (exit=%s) ===\n' "${phase}" "${exit_code}"
+      exit "${exit_code}"
+    fi
     ((attempt >= max_phase_retries)) && {
       printf '=== Pipeline aborted at phase %s (exit=%s) ===\n' "${phase}" "${exit_code}"
       exit "${exit_code}"

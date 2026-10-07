@@ -49,6 +49,80 @@ platforms. Runners transport the resolved override through the internal, phase-s
 PowerShell restores the previous value even on a phase failure. Standalone dispatchers
 also read the YAML model default. No agent files are rewritten.
 
+## Group prerequisites and retries
+
+Phases J and K honor the upstream per-file `_req-bundles/_skipped.json` and
+`_fa-bundles/_skipped.json` decisions, in addition to excluding PRC members.
+Skipped members (for example, copybooks and BMS mapsets) are listed with their
+reasons in the group bundle, but do not require a per-file narrative document.
+The remaining members retain their manifest order. An explicit per-file profile
+can enable generation again; its stager removes the corresponding skip marker.
+A missing document without a skip marker is still an error, not an implicit skip.
+
+Missing eligible member documents, or a staged group with no eligible inputs,
+return prerequisite exit code **4**. Both runners stop immediately on this code
+instead of retrying the same deterministic failure. Other nonzero exits retain
+the configured retry policy. Existing PRC-only batch no-ops are unchanged.
+PowerShell J/K summaries use the last updated step report from the current
+attempt, rather than counting successes from an old finalizer report.
+
+After repairing prerequisites, resume at the failed phase without `-Force` or
+`-Restart`; existing dispatch resume checks remain in effect.
+
+## DOCX diagnostics
+
+The shared PowerShell [DOCX converter](lib/Convert-MdToDocx.ps1) captures Pandoc
+stderr and uses its exit code to determine conversion success, including on
+Windows PowerShell 5.1 with `ErrorActionPreference=Stop`. Diagnostics from a
+successful conversion remain visible as warnings and in the result's `Stderr`.
+Nonzero conversion results fail the DOCX-producing phases after their result
+XML has been saved; they are not treated as successful exports.
+
+## Portal languages
+
+The [static builder](portal/build-portal-static.py) and
+[offline builder](portal/build-portal-offline.py) use `output.languages` from
+[pipeline.yaml](../config/pipeline.yaml). Only selected languages are published,
+even when old Markdown editions remain on disk. English and Italian portal
+controls are localized; source code, identifiers, and shared Markdown content
+are preserved unchanged.
+
+In Italian pages, recognized standard template headings (for example `Summary`,
+`Purpose`, and `Entry contract`) are translated when rendering HTML, including
+numbered headings and matching table-of-contents links. Existing heading anchors
+are retained so bookmarks still work. Inline code in recognized headings (such
+as `EXEC SQL`) retains its identifiers and markup. Original Markdown files,
+prose, code blocks, custom headings, and other inline markup are not rewritten.
+Authoring self-check and author/redaction verification sections are omitted from
+published web and offline pages without modifying their source Markdown.
+The offline source viewer embeds these same localized pages and translates its
+chunk-type labels without changing source identifiers.
+
+Standalone builders accept `--languages it` (PowerShell wrappers:
+`-Languages it`). The public runners forward the ordered union of their resolved
+document-language selections to phase N. A source-viewer link from a document
+selects that document's language; saved browser preferences cannot select an
+excluded language. Missing chunk documentation is reported rather than silently
+replaced with another language.
+
+After changing languages, rebuild the portal without `--skip-build`/`-SkipBuild`.
+Skip-build verifies the existing static manifest and refuses a different language
+selection. Building phase N only renders existing documentation and packages
+offline resources; it does not rerun chunk authoring or invoke Copilot.
+
+Footnote cleanup is a best-effort text scan, not a Markdown parser. For example,
+`` `[^key]` `` is literal code, not a footnote reference, so Pandoc can still
+report the definition as unused. Use `[^key]` outside backticks for a real
+citation. Such warnings do not require regenerating chunks.
+
+To retry only a Word export without invoking Copilot or modifying the Markdown:
+
+```powershell
+. .\scripts\lib\Convert-MdToDocx.ps1
+$result = Convert-MdToDocx -MarkdownPath '.\docs\it\ATVERS01.CBL\complete.md' -Force
+if ($result.Exit -ne 0) { throw $result.Stderr }
+```
+
 ## Platform launchers
 
 | Path | Responsibility |

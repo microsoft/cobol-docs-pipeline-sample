@@ -12,6 +12,7 @@ languages="en"; profile_name=""; agent=""; section_throttle=6; finalizer_throttl
 dispatch_throttle=4; grouping_manifest="config/grouping.yaml"; pandoc_path="pandoc"
 dry_run=false; force=false; prune=false; skip_docx=false
 portal_skip=false; portal_site=""; portal_out=""; portal_open=false
+portal_languages=""
 while (($#)); do
   option="$(native_normalize_option "$1")"; shift
   case "${option}" in
@@ -22,7 +23,7 @@ while (($#)); do
     sourceroot) source_root="$1"; shift ;;
     resultsdir) results_dir="$1"; shift ;;
     throttle) throttle="$1"; shift ;;
-    languages|grouplanguages) languages="$1"; shift ;;
+    languages|grouplanguages) languages="$1"; portal_languages="$1"; shift ;;
     profilename|profile) profile_name="$1"; shift ;;
     agent) agent="$1"; shift ;;
     docsthrottle|diagramsthrottle) dispatch_throttle="$1"; shift ;;
@@ -204,6 +205,7 @@ case "${phase}" in
     ;;
   N)
     portal_args=(); [[ -n "${source_root}" ]] && portal_args+=(--source-root "${source_root}")
+    [[ -n "${portal_languages}" ]] && portal_args+=(--languages "${portal_languages}")
     ${portal_skip} && portal_args+=(--skip-build)
     [[ -n "${portal_site}" ]] && portal_args+=(--site "${portal_site}")
     [[ -n "${portal_out}" ]] && portal_args+=(--out "${portal_out}")

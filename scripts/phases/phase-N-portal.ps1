@@ -18,7 +18,11 @@
 
 .PARAMETER SkipBuild
   Reuse the existing docs/_portal/site instead of rebuilding it; only the
-  offline copy is (re)generated.
+  offline copy is (re)generated. Language selection must still match.
+
+.PARAMETER Languages
+  Optional comma-separated portal languages. Defaults to output.languages
+  in config/pipeline.yaml when this phase is invoked independently.
 
 .PARAMETER Site
   Input static site directory. Defaults to docs/_portal/site.
@@ -39,7 +43,8 @@ param(
   [switch]$SkipBuild,
   [string]$Site,
   [string]$Out,
-  [switch]$Open
+  [switch]$Open,
+  [string]$Languages
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +60,7 @@ New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
 
 $buildArgs = @{}
 if ($SourceRoot) { $buildArgs.SourceRoot = $SourceRoot }
+if ($Languages)  { $buildArgs.Languages = $Languages }
 if ($SkipBuild)  { $buildArgs.SkipBuild  = $true }
 if ($Site)       { $buildArgs.Site       = $Site }
 if ($Out)        { $buildArgs.Out        = $Out }

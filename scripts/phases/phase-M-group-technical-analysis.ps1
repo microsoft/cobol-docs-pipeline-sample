@@ -144,5 +144,6 @@ exit (Invoke-PhaseBatch -PhaseId M -ResultsXml $dispXml -Action {
   }
   if ($docxFail.Count -gt 0) {
     foreach ($f in $docxFail) { Write-Warning "DOCX failed: $($f.MarkdownPath) :: $($f.Stderr)" }
+    throw "DOCX conversion failed for $($docxFail.Count) file(s)."
   }
 })

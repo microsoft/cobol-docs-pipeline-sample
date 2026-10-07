@@ -48,7 +48,11 @@ Per-group finalizer scope:
   `docs/_shared/_groups/<group_id>/_req-group-sections/<lang>/*.md`
 
 Bundles aggregate, per group:
-- Each member's `docs/<lang>/<member>/requirements.md` excerpts (phase F).
+- Each eligible member's `docs/<lang>/<member>/requirements.md` excerpts (phase F).
+- PRC members and members with an upstream `_req-bundles/_skipped.json` decision
+  are excluded from narrative inputs and recorded in `bundle.skipped_members`.
+  Do not invent requirements for them. Other missing primary-language member
+  documents are prerequisite errors (exit 4), not implicit skips.
 - Member narrative inputs and bundle excerpts use `<lang> = bundle.languages[0]`;
   do not require an English intermediate or member inputs in every output language.
 - The group's `docs/<lang>/_groups/<group_id>/complete.md` excerpts (phase I).

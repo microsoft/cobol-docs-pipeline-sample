@@ -18,6 +18,11 @@
 
 .PARAMETER SkipBuild
   Do not re-run build-portal-static.py; patch the existing site instead.
+  Its language selection must match the current configuration or override.
+
+.PARAMETER Languages
+  Optional comma-separated output languages (e.g. it or it,en). Defaults
+  to output.languages in config/pipeline.yaml.
 
 .PARAMETER Site
   Input static site directory. Defaults to docs/_portal/site.
@@ -44,7 +49,8 @@ param(
     [switch]$SkipBuild,
     [string]$Site,
     [string]$Out,
-    [switch]$Open
+    [switch]$Open,
+    [string]$Languages
 )
 
 Set-StrictMode -Version Latest
@@ -73,6 +79,7 @@ if ($python) {
 
 if ($SkipBuild)            { $pyArgs += '--skip-build' }
 if ($SourceRoot)          { $pyArgs += @('--source-root', $SourceRoot) }
+if ($Languages)           { $pyArgs += @('--languages', $Languages) }
 if ($Site)                { $pyArgs += @('--site', $Site) }
 if ($Out)                 { $pyArgs += @('--out', $Out) }
 

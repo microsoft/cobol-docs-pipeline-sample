@@ -134,7 +134,7 @@ Write-PhaseEvent -Phase J -Event 'start' -Data @{
   manifest = $effectiveManifestPath; languages = $Languages; dryRun = [bool]$DryRun
 }
 
-exit (Invoke-PhaseBatch -PhaseId J -ResultsXml $finalizeXml -Action {
+exit (Invoke-PhaseBatch -PhaseId J -ResultsXml $finalizeXml -StepResultsXml @($stageXml, $sectionXml) -Action {
   Write-PhaseEvent -Phase J -Event 'step' -Data @{ name = 'stage' }
   $stageArgs.Manifest = $effectiveManifestPath
   & $stageBatch @stageArgs
@@ -180,5 +180,6 @@ exit (Invoke-PhaseBatch -PhaseId J -ResultsXml $finalizeXml -Action {
   }
   if ($docxFail.Count -gt 0) {
     foreach ($f in $docxFail) { Write-Warning "DOCX failed: $($f.MarkdownPath) :: $($f.Stderr)" }
+    throw "DOCX conversion failed for $($docxFail.Count) file(s)."
   }
 })

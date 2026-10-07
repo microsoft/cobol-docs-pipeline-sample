@@ -15,23 +15,24 @@ POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 @unittest.skipUnless(POWERSHELL, "PowerShell is required for phase retry tests")
 class PhaseRetryTests(unittest.TestCase):
-    def run_retry(self, fail_until: int, max_retries: int) -> tuple[int, int, str]:
+    def run_retry(self, fail_until: int, max_retries: int, failure_code: int = 9) -> tuple[int, int, str]:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             probe_path = temp_path / "phase-probe.ps1"
             counter_path = temp_path / "counter.txt"
             probe_path.write_text(
-                """param([string]$CounterPath, [int]$FailUntil)
+                """param([string]$CounterPath, [int]$FailUntil, [int]$FailureCode)
 $count = if (Test-Path $CounterPath) { [int](Get-Content $CounterPath) } else { 0 }
 $count++
 Set-Content -Path $CounterPath -Value $count
-if ($count -le $FailUntil) { exit 9 }
+if ($count -le $FailUntil) { exit $FailureCode }
 exit 0
 """,
                 encoding="utf-8",
             )
 
             environment = os.environ.copy()
+            environment.pop("PSMODULEPATH", None)
             environment.update(
                 {
                     "HELPER_PATH": str(HELPER_PATH),
@@ -39,6 +40,7 @@ exit 0
                     "COUNTER_PATH": str(counter_path),
                     "FAIL_UNTIL": str(fail_until),
                     "MAX_RETRIES": str(max_retries),
+                    "FAILURE_CODE": str(failure_code),
                 }
             )
             command = (
@@ -46,7 +48,7 @@ exit 0
                 "$result = Invoke-PhaseWithRetry -PhaseId TEST "
                 "-PhaseScript $env:PROBE_PATH "
                 "-PhaseArgs @{ CounterPath = $env:COUNTER_PATH; "
-                "FailUntil = [int]$env:FAIL_UNTIL } "
+                "FailUntil = [int]$env:FAIL_UNTIL; FailureCode = [int]$env:FAILURE_CODE } "
                 "-MaxRetries ([int]$env:MAX_RETRIES); "
                 "$attempts = [int](Get-Content $env:COUNTER_PATH); "
                 "Write-Output \"RESULT=$result ATTEMPTS=$attempts\""
@@ -84,6 +86,14 @@ exit 0
 
         self.assertEqual(result, 9)
         self.assertEqual(attempts, 1)
+
+    def test_missing_prerequisite_is_not_retried(self) -> None:
+        result, attempts, output = self.run_retry(fail_until=10, max_retries=3, failure_code=4)
+
+        self.assertEqual(result, 4)
+        self.assertEqual(attempts, 1)
+        self.assertIn("retry-skipped", output)
+        self.assertNotIn("event=retry ", output)
 
 
 if __name__ == "__main__":

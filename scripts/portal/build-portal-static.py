@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import importlib
 import json
 import os
 import re
@@ -30,8 +31,10 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from xml.etree.ElementTree import Element
 
 import markdown
+from markdown.treeprocessors import Treeprocessor
 
 try:
   import yaml
@@ -48,6 +51,358 @@ DEFAULT_SOURCE_ROOT = REPO_ROOT / "repos" / "sample1"
 SOURCES_SITE_DIR = "_sources"
 LANGS = ("en", "it")
 LANG_LABELS = {"en": "English", "it": "Italiano"}
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "tools"))
+resolve_languages = importlib.import_module("resolve-output-languages").resolve_languages
+
+ITALIAN_UI = {
+    "Home": "Pagina iniziale",
+    "division": "divisione",
+    "section": "sezione",
+    "paragraph": "paragrafo",
+    "data-record": "record dati",
+    "copybook": "copybook",
+    "exec-sql": "blocco SQL",
+    "exec-cics": "blocco CICS",
+    "jcl-job": "job JCL",
+    "jcl-step": "passo JCL",
+    "other": "altro",
+    "source viewer": "visualizzatore sorgente",
+    "Source Code": "Codice sorgente",
+    "Source": "Sorgente",
+    "source": "sorgente",
+    "Show source code": "Mostra codice sorgente",
+    "Show source for this chunk": "Mostra sorgente di questo blocco",
+    "Open the side-by-side source viewer": "Apri sorgente e documentazione affiancati",
+    "View source code with split-panel documentation": "Visualizza codice e documentazione affiancati",
+    "Show source for this citation (line {line})": "Mostra sorgente della citazione (riga {line})",
+    "Open source viewer at line {line}": "Apri sorgente alla riga {line}",
+    "Show source for this section": "Mostra sorgente di questa sezione",
+    "Close": "Chiudi",
+    "Jump to:": "Vai a:",
+    "select chunk": "seleziona blocco",
+    "Hover or click a chunk on the left, or pick one from the dropdown.": "Passa sul codice o seleziona un blocco a sinistra oppure dal menu.",
+    "Open full page": "Apri pagina completa",
+    "No chunk selected.": "Nessun blocco selezionato.",
+    "No documentation available for this chunk in the selected language.": "Nessuna documentazione disponibile per questo blocco nella lingua selezionata.",
+    "Loading…": "Caricamento…",
+    "Failed to load documentation: ": "Impossibile caricare la documentazione: ",
+    "Failed to load source: ": "Impossibile caricare il sorgente: ",
+    "Source file not bundled: ": "File sorgente non incluso: ",
+    "confidence": "confidenza",
+    "Zoom out": "Riduci",
+    "Zoom in": "Ingrandisci",
+    "Reset zoom": "Ripristina ingrandimento",
+    "Reset": "Ripristina",
+    "Index": "Indice",
+    "Complete": "Documento completo",
+    "Functional analysis": "Analisi funzionale",
+    "Requirements": "Requisiti",
+    "Technical analysis": "Analisi tecnica",
+    "Migration runbook": "Guida alla migrazione",
+    "Coverage": "Copertura",
+    "Groups": "Gruppi",
+    "Sections": "Sezioni",
+    "Shared": "Condivisi",
+    "Shared resources": "Risorse condivise",
+    "Central glossary": "Glossario centrale",
+    "Open central glossary": "Apri glossario centrale",
+    "Open section page": "Apri pagina della sezione",
+    "Programs / JCL files": "Programmi / file JCL",
+    "Documentation portal": "Portale della documentazione",
+    "Pick a language to browse programs, JCL jobs, and groups.": "Seleziona una lingua per consultare programmi, job JCL e gruppi.",
+}
+
+ITALIAN_HEADINGS = {
+    "Summary": "Riepilogo",
+    "Purpose": "Scopo",
+    "Purpose and scope": "Scopo e ambito",
+    "Business context": "Contesto funzionale",
+    "Business / operational context": "Contesto funzionale e operativo",
+    "Entry contract": "Contratto di ingresso",
+    "Entry sites": "Punti di ingresso",
+    "Detailed behaviour": "Comportamento dettagliato",
+    "Flow": "Flusso",
+    "Flow diagram": "Diagramma di flusso",
+    "Exit contract": "Contratto di uscita",
+    "Exit sites": "Punti di uscita",
+    "Exit points": "Punti di uscita",
+    "Preconditions": "Precondizioni",
+    "Postconditions": "Postcondizioni",
+    "Invariants": "Invarianti",
+    "Nominal cases and examples": "Casi nominali ed esempi",
+    "Edge cases and errors": "Casi limite ed errori",
+    "Design decisions and rationale": "Decisioni progettuali e motivazioni",
+    "Data and contracts touched": "Dati e contratti coinvolti",
+    "Variables read / written": "Variabili lette e scritte",
+    "EXEC SQL statements": "Istruzioni EXEC SQL",
+    "EXEC CICS statements": "Istruzioni EXEC CICS",
+    "Side effects": "Effetti collaterali",
+    "Modernization implications": "Implicazioni per la modernizzazione",
+    "Complexity and migration risk": "Complessità e rischio di migrazione",
+    "Dead / unreachable code": "Codice inutilizzato o irraggiungibile",
+    "Cross-references": "Riferimenti incrociati",
+    "Calls / uses (outgoing)": "Chiamate e utilizzi in uscita",
+    "Called / used by (incoming)": "Chiamanti e utilizzatori in ingresso",
+    "Data touched (records read / written by this section)": "Dati coinvolti (record letti e scritti dalla sezione)",
+    "External dependencies (datasets / tables / queues / maps / programs)": "Dipendenze esterne (dataset, tabelle, code, mappe e programmi)",
+    "Warnings": "Avvertenze",
+    "Citations": "Citazioni",
+    "Sources": "Fonti",
+    "File / dataset bindings (DDNAME ↔ FD / SELECT ↔ DSN)": "Associazioni di file e dataset (DDNAME ↔ FD / SELECT ↔ DSN)",
+    "DDNAME ↔ program data bindings (workspace)": "DDNAME ↔ associazioni dei dati del programma (workspace)",
+    "PROCEDURE DIVISION USING parameters": "Parametri PROCEDURE DIVISION USING",
+    "USE procedures": "Procedure USE",
+    "Calling programs (consumers of the LINKAGE SECTION)": "Programmi chiamanti (utilizzatori della LINKAGE SECTION)",
+    "File-Control (SELECT clauses)": "File-Control (clausole SELECT)",
+    "File-Control bindings (SELECT ↔ FD)": "Associazioni File-Control (SELECT ↔ FD)",
+    "Included members (JCLLIB / INCLUDE)": "Membri inclusi (JCLLIB / INCLUDE)",
+    'Incoming xref (workspace-scope, via == "copy")': 'Riferimenti in ingresso (workspace, via == "copy")',
+    "Other incoming edges (non-copy, if any)": "Altri collegamenti in ingresso (diversi da copy, se presenti)",
+    "Notes": "Note",
+    "Inventory": "Inventario",
+    "Binding sites": "Punti di associazione",
+    "Call graph (outbound)": "Grafo delle chiamate in uscita",
+    "Condition names (88-levels)": "Nomi di condizione (livelli 88)",
+    "Configuration clauses": "Clausole di configurazione",
+    "Configuration section": "Sezione di configurazione",
+    "Consumers (read the record)": "Utilizzatori (lettura del record)",
+    "Consumers (read the records carried by this copybook)": "Utilizzatori (lettura dei record del copybook)",
+    "Copybook kind and inclusion contract": "Tipo di copybook e contratto di inclusione",
+    "Copybooks and DCLGENs": "Copybook e DCLGEN",
+    "Data ownership and sharing": "Titolarità e condivisione dei dati",
+    "Dataset / device inventory": "Inventario di dataset e dispositivi",
+    "Datasets touched": "Dataset coinvolti",
+    "DD inventory": "Inventario DD",
+    "DD statements": "Istruzioni DD",
+    "Dead / unreachable paragraphs": "Paragrafi inutilizzati o irraggiungibili",
+    "Dead / unused declarations": "Dichiarazioni inutilizzate",
+    "Declaratives": "Dichiarative",
+    "Division documentation": "Documentazione delle divisioni",
+    "Downstream (consumers of this step's outputs)": "A valle (utilizzatori degli output del passo)",
+    "Downstream gates on this step": "Condizioni dei passi successivi",
+    "EXEC contract": "Contratto EXEC",
+    "EXEC summary": "Riepilogo EXEC",
+    "External dependencies (copybooks / DCLGENs / DB2 tables / BMS maps / commareas)": "Dipendenze esterne (copybook, DCLGEN, tabelle DB2, mappe BMS e commarea)",
+    "External dependencies (datasets / VSAM clusters / printers / queues)": "Dipendenze esterne (dataset, cluster VSAM, stampanti e code)",
+    "External I/O surface": "Interfacce I/O esterne",
+    "External resources": "Risorse esterne",
+    "FD / SD entries": "Dichiarazioni FD / SD",
+    "Field inventory": "Inventario dei campi",
+    "Field layout": "Struttura dei campi",
+    "Fields (per record)": "Campi per record",
+    "File section": "Sezione dei file",
+    "Header and linkage contract": "Intestazione e contratto di collegamento",
+    "I-O-Control clauses": "Clausole I-O-Control",
+    "I/O verbs by resource": "Istruzioni I/O per risorsa",
+    "Inclusion graph": "Grafo delle inclusioni",
+    "Inclusion inventory": "Inventario delle inclusioni",
+    "Inclusion matrix": "Matrice delle inclusioni",
+    "Inclusion sites": "Punti di inclusione",
+    "Incoming callers (programs that invoke this one)": "Chiamanti in ingresso (programmi che invocano questo programma)",
+    "Input-Output section": "Sezione Input-Output",
+    "Instream input": "Input in linea",
+    "Invariants and domain constraints": "Invarianti e vincoli di dominio",
+    "JCL / job streams that supply the DDs": "JCL e job che forniscono le DD",
+    "JCL / triggers that schedule this program": "JCL e trigger che pianificano il programma",
+    "Linkage items": "Elementi di collegamento",
+    "Linkage section": "Sezione Linkage",
+    "Local-Storage section": "Sezione Local-Storage",
+    "Logic": "Logica",
+    "Logical-to-physical binding catalogue": "Catalogo delle associazioni logico-fisiche",
+    "Mainline control flow": "Flusso di controllo principale",
+    "Mainline diagram": "Diagramma del flusso principale",
+    "Memory and storage layout": "Organizzazione della memoria",
+    "Migration risks": "Rischi di migrazione",
+    "Nested COPY (transitive includes)": "COPY annidate (inclusioni transitive)",
+    "Operational role in the wider system": "Ruolo operativo nel sistema",
+    "Outbound calls": "Chiamate in uscita",
+    "Outgoing callees (programs this one invokes)": "Programmi chiamati in uscita",
+    "Overlays (REDEFINES)": "Sovrapposizioni (REDEFINES)",
+    "Preconditions on declared data": "Precondizioni sui dati dichiarati",
+    "Preconditions on the runtime environment": "Precondizioni sull'ambiente di esecuzione",
+    "PROC overrides": "Sostituzioni dei parametri PROC",
+    "Procedure paragraphs that read / write the declared records": "Paragrafi che leggono o scrivono i record dichiarati",
+    "Producers (write the record)": "Produttori (scrittura del record)",
+    "Producers (write the records carried by this copybook)": "Produttori (scrittura dei record del copybook)",
+    "Program / utility behaviour": "Comportamento del programma o dell'utilità",
+    "Program / utility binding": "Associazione del programma o dell'utilità",
+    "Read / write sites": "Punti di lettura e scrittura",
+    "Record role and binding": "Ruolo e associazione del record",
+    "Records and structure": "Record e struttura",
+    "Related shared definitions": "Definizioni condivise correlate",
+    "REPLACING divergence": "Differenze introdotte da REPLACING",
+    "Report section": "Sezione dei report",
+    "Restart and recovery": "Riavvio e ripristino",
+    "Return-code contract": "Contratto dei codici di ritorno",
+    "Return-code matrix": "Matrice dei codici di ritorno",
+    "Risky and forbidden constructs": "Costrutti rischiosi e vietati",
+    "Runtime assumptions": "Ipotesi sull'ambiente di esecuzione",
+    "Screen section": "Sezione delle schermate",
+    "Section and paragraph inventory": "Inventario di sezioni e paragrafi",
+    "Section documentation": "Documentazione delle sezioni",
+    "Sections / paragraphs that consume the declared files": "Sezioni e paragrafi che utilizzano i file dichiarati",
+    "Sections and top-level paragraphs": "Sezioni e paragrafi di primo livello",
+    "Shared layout (copybook / DCLGEN inclusion)": "Struttura condivisa (inclusione di copybook e DCLGEN)",
+    "Structure diagram": "Diagramma della struttura",
+    "Termination contract": "Contratto di terminazione",
+    "Upstream (predecessor steps / triggers)": "A monte (passi precedenti e trigger)",
+    "Usage in the program": "Utilizzo nel programma",
+    "Variable cardinality (OCCURS DEPENDING ON)": "Cardinalità variabile (OCCURS DEPENDING ON)",
+    "Working-Storage section": "Sezione Working-Storage",
+    "Workspace data lineage (other programs / JCL that share or bind these records)": "Provenienza dei dati (programmi e JCL che condividono o associano i record)",
+    "01-level inventory": "Inventario dei livelli 01",
+    "01-level inventory (Local-Storage)": "Inventario dei livelli 01 (Local-Storage)",
+    "01-level inventory (Working-Storage)": "Inventario dei livelli 01 (Working-Storage)",
+    "Read first": "Da leggere prima",
+    "Operational summary": "Riepilogo operativo",
+    "High-level flow": "Flusso generale",
+    "Quick facts": "Dati essenziali",
+    "Documents": "Documenti",
+    "References": "Riferimenti",
+    "Divisions": "Divisioni",
+    "Sections": "Sezioni",
+    "Functional analysis": "Analisi funzionale",
+    "Requirements": "Requisiti",
+    "Coverage & quality": "Copertura e qualità",
+    "Boundary": "Confini",
+    "Symbolic parameters": "Parametri simbolici",
+    "Upstream flows (produce our inputs)": "Flussi a monte (producono gli input)",
+    "Downstream flows (consume our outputs)": "Flussi a valle (utilizzano gli output)",
+    "Shared members (also belong to other flows)": "Membri condivisi con altri flussi",
+    "SLA, volumes, recovery, security, compliance": "SLA, volumi, ripristino, sicurezza e conformità",
+    "Control-flow diagram": "Diagramma del flusso di controllo",
+    "Failure modes and blast radius": "Modalità di errore e ambito di impatto",
+    "Dead / unused rollup": "Riepilogo degli elementi inutilizzati",
+    "Unreached members": "Membri non raggiunti",
+    "Declared but unobserved integrations": "Integrazioni dichiarate ma non osservate",
+    "Declared but unenforced constraints": "Vincoli dichiarati ma non applicati",
+    "Incoming (what triggers this job)": "Ingressi (cosa avvia il job)",
+    "Outgoing artefacts (datasets / messages produced and consumed downstream)": "Artefatti in uscita (dataset e messaggi prodotti e utilizzati a valle)",
+    "Unreachable steps": "Passi irraggiungibili",
+    "Unused DDs": "DD inutilizzate",
+    "Unused symbolic parameters / overrides": "Parametri simbolici e sostituzioni inutilizzati",
+    "Section-by-section map": "Mappa delle sezioni",
+    "Job header": "Intestazione del job",
+    "Release history": "Cronologia delle versioni",
+    "Trigger and termination contract": "Contratto di avvio e terminazione",
+    "Per-source deliverables": "Documenti per sorgente",
+    "Recent releases (latest 3–5)": "Versioni recenti (ultime 3–5)",
+    "Triggers (what starts the flow)": "Trigger (cosa avvia il flusso)",
+    "Earlier history (summary)": "Cronologia precedente (riepilogo)",
+    "Terminations (what the flow leaves behind)": "Terminazioni (risultati del flusso)",
+    "Modernization artifacts (M1–M14)": "Artefatti di modernizzazione (M1–M14)",
+    "Modernization artefacts (M1–M14)": "Artefatti di modernizzazione (M1–M14)",
+    "Quality artefacts": "Artefatti di qualità",
+    "Members": "Membri",
+    "Triggers and scheduling": "Trigger e pianificazione",
+    "Incoming callers (programs / JCL that invoke this one)": "Chiamanti in ingresso (programmi e JCL)",
+    "External dependencies (datasets / tables / queues / maps / copybooks)": "Dipendenze esterne (dataset, tabelle, code, mappe e copybook)",
+    "Dead / unreachable rollup": "Riepilogo degli elementi inutilizzati o irraggiungibili",
+    "End-to-end flow": "Flusso completo",
+    "Last release": "Ultima versione",
+    "Step inventory": "Inventario dei passi",
+    "Unreachable sections / paragraphs": "Sezioni e paragrafi irraggiungibili",
+    "Orphan declarations (FDs, SELECTs, copybooks, fields)": "Dichiarazioni orfane (FD, SELECT, copybook e campi)",
+    "Unresolved dynamic CALLs / EXEC CICS targets": "Destinazioni CALL dinamiche ed EXEC CICS non risolte",
+    "Step details": "Dettagli dei passi",
+    "Step sequence": "Sequenza dei passi",
+    "Warnings beacon": "Avvertenze principali",
+    "Data flow": "Flusso dei dati",
+    "Procedures invoked": "Procedure invocate",
+    "Sections (inline, full content)": "Sezioni (contenuto integrale)",
+    "External integrations": "Integrazioni esterne",
+    "Programs invoked": "Programmi invocati",
+    "Touched resources (rollup)": "Riepilogo delle risorse coinvolte",
+    "Datasets": "Dataset",
+    "DB2 tables / cursors": "Tabelle e cursori DB2",
+    "MQ queues / topics": "Code e topic MQ",
+    "CICS resources": "Risorse CICS",
+    "Programs called from outside the group": "Programmi chiamati dall'esterno del gruppo",
+    "Programs in the group calling out": "Programmi del gruppo che chiamano l'esterno",
+}
+
+
+class LocalizeHeadings(Treeprocessor):
+    """Translate standard labels after TOC generation, keeping existing anchors."""
+
+    def __init__(self, md: markdown.Markdown, lang: str) -> None:
+        super().__init__(md)
+        self.lang = lang
+
+    @staticmethod
+    def replace_label(element: Element, text: str) -> bool:
+        # Inline code identifiers must survive intact, including their markup.
+        parts = []
+        remaining = text
+        for child in element:
+            if child.tag != "code" or len(child) or not child.text:
+                return False
+            before, identifier, after = remaining.partition(child.text)
+            if not identifier:
+                return False
+            parts.append(before)
+            remaining = after
+        parts.append(remaining)
+        element.text = parts[0]
+        for child, tail in zip(element, parts[1:]):
+            child.tail = tail
+        return True
+
+    def run(self, root: Element) -> None:
+        if self.lang != "it":
+            return
+        translated = {}
+        for element in root.iter():
+            if element.tag not in {"h2", "h3", "h4", "h5", "h6"}:
+                continue
+            original = "".join(element.itertext())
+            match = re.fullmatch(r"(\d+(?:\.\d+)*\.?\s+)?(.+)", original)
+            if not match or match[2] not in ITALIAN_HEADINGS:
+                continue
+            label = (match[1] or "") + ITALIAN_HEADINGS[match[2]]
+            if not self.replace_label(element, label):
+                continue
+            anchor = element.get("id")
+            if anchor:
+                translated["#" + anchor] = (original, label)
+        for element in root.iter("a"):
+            label = translated.get(element.get("href"))
+            if label and "".join(element.itertext()) == label[0]:
+                self.replace_label(element, label[1])
+
+
+def render_markdown(raw: str, md_engine: markdown.Markdown, lang: str) -> str:
+    md_engine.reset()
+    md_engine.treeprocessors.register(LocalizeHeadings(md_engine, lang), "portal-headings", 1)
+    return md_engine.convert(raw)
+
+
+def ui(text: str, lang: str) -> str:
+    return ITALIAN_UI.get(text, text) if lang == "it" else text
+
+
+def ui_payload(languages: list[str] | tuple[str, ...]) -> str:
+    return json.dumps(
+        {lang: ITALIAN_UI if lang == "it" else {} for lang in languages},
+        ensure_ascii=False,
+    ).replace("<", "\\u003c")
+
+
+UI_JS = r"""
+var portalTranslations = JSON.parse(document.getElementById('portal-i18n').textContent);
+function portalText(text) {
+  return (portalTranslations[document.documentElement.lang] || {})[text] || text;
+}
+function applyPortalLanguage(lang) {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    el.textContent = portalText(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+    el.title = portalText(el.dataset.i18nTitle);
+  });
+}
+"""
 SHARED_GLOSSARY_MD = DOCS_ROOT / "_glossary.md"
 SHARED_PAGES_DIR = "_shared_pages"
 
@@ -99,8 +454,8 @@ FENCE_RE = re.compile(r"^\s*```")
 def strip_hidden_sections(md_text: str) -> str:
     """Remove authoring-only sections from generated pages.
 
-    Hidden headings (case-insensitive):
-    - Authoring self-check
+    Hidden headings include the English authoring self-check and the Italian
+    author/redaction verification variants emitted by section writers.
 
     The matched heading and its body are removed until the next heading
     with a level less-than-or-equal to the matched one.
@@ -111,12 +466,19 @@ def strip_hidden_sections(md_text: str) -> str:
 
     def _norm(text: str) -> str:
         text = text.strip().lower()
-        text = re.sub(r"[\s\-_:]+", " ", text)
-        return text
+        return re.sub(r"[^\w]+", " ", text).strip()
 
     def _is_hidden(heading: str) -> bool:
         h = _norm(heading)
-        return "authoring self check" in h
+        return h == "authoring self check" or h in {
+            "autoverifica",
+            "autoverifica authoring",
+            "autoverifica dell autore",
+            "autoverifica della stesura",
+            "autoverifica di authoring",
+            "autoverifica di redazione",
+            "verifica dell autore",
+        }
 
     lines = md_text.split("\n")
     out: list[str] = []
@@ -220,6 +582,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--source-root",
         help="Source tree used to populate the side-by-side source viewer.",
     )
+    parser.add_argument("--languages", help="Comma-separated languages; defaults to output.languages.")
     return parser.parse_args(argv)
 
 
@@ -371,7 +734,7 @@ FOOTNOTE_REF_RE = re.compile(
 
 
 def inject_title_source_link(html_body: str, viewer_url: str | None,
-                             has_sources: bool = False) -> str:
+                             has_sources: bool = False, lang: str = "en") -> str:
     """Inject a small ``source`` control right after the page's first
     ``<h1>``. On pages with the slide-out source panel (``has_sources``)
     the control is a ``<button>`` that opens the panel anchored on the
@@ -380,10 +743,10 @@ def inject_title_source_link(html_body: str, viewer_url: str | None,
     if has_sources:
         link = (' <button type="button" class="sv-source-link header-source"'
                 ' data-open-panel="title"'
-                ' title="Show source for this chunk">source &#x2630;</button>')
+                f' title="{ui("Show source for this chunk", lang)}">{ui("source", lang)} &#x2630;</button>')
     elif viewer_url:
         link = (f' <a class="sv-source-link header-source" href="{html.escape(viewer_url)}"'
-                f' title="Open the side-by-side source viewer">source &#x2630;</a>')
+                f' title="{ui("Open the side-by-side source viewer", lang)}">{ui("source", lang)} &#x2630;</a>')
     else:
         return html_body
 
@@ -397,7 +760,7 @@ def inject_title_source_link(html_body: str, viewer_url: str | None,
 
 def linkify_citation_refs(html_body: str, citations: dict[str, dict],
                           viewer_url: str | None,
-                          has_sources: bool = False) -> str:
+                          has_sources: bool = False, lang: str = "en") -> str:
     """Append a small ``L<n>`` chip next to every ``[^src-N]`` footnote
     reference. On pages with the slide-out source panel the chip is a
     ``<button>`` that opens the panel scrolled to the cited line range;
@@ -420,11 +783,11 @@ def linkify_citation_refs(html_body: str, citations: dict[str, dict],
         if has_sources:
             chip = (f'<button type="button" class="sv-line-link"'
                     f' data-open-cid="{html.escape(cid)}"'
-                    f' title="Show source for this citation (line {start})">{label}</button>')
+                    f' title="{ui("Show source for this citation (line {line})", lang).format(line=start)}">{label}</button>')
         else:
             chip = (f'<a class="sv-line-link" href="{html.escape(viewer_url)}#L{start}"'
                     f' target="_blank" rel="noopener"'
-                    f' title="Open source viewer at line {start}">{label}</a>')
+                    f' title="{ui("Open source viewer at line {line}", lang).format(line=start)}">{label}</a>')
         return sup_html + chip
 
     return FOOTNOTE_REF_RE.sub(_augment, html_body)
@@ -442,16 +805,18 @@ def page_template(*, title: str, lang: str, body: str, sidebar: str,
         if sibling_url else
         f'<span class="lang-toggle disabled">{other_label}</span>'
     )
+    if other_lang not in LANGS:
+        sibling_link = ""
     src_toggle = (
-        '<button id="src-toggle" class="src-toggle" title="Show source code">'
-        '&#x2630; Source</button>' if has_sources else ''
+        f'<button id="src-toggle" class="src-toggle" title="{ui("Show source code", lang)}">'
+        f'&#x2630; {ui("Source", lang)}</button>' if has_sources else ''
     )
-    src_panel = '''
+    src_panel = f'''
 <aside id="source-panel" class="source-panel" hidden>
   <header class="sp-head">
-    <span class="sp-title">Source</span>
+    <span class="sp-title">{ui("Source", lang)}</span>
     <span class="sp-file" id="sp-file">—</span>
-    <button id="sp-close" class="sp-close" title="Close">&times;</button>
+    <button id="sp-close" class="sp-close" title="{ui("Close", lang)}">&times;</button>
   </header>
   <div class="sp-citations" id="sp-citations"></div>
   <div class="sp-codewrap"><pre class="sp-code"><code id="sp-code"></code></pre></div>
@@ -472,7 +837,7 @@ def page_template(*, title: str, lang: str, body: str, sidebar: str,
 <header class="topbar">
   <a class="brand" href="{rel_root}index.html">DEMO COBOL Modernization</a>
   <nav class="topnav">
-    <a href="{rel_root}{lang}/index.html">{LANG_LABELS[lang]} home</a>
+    <a href="{rel_root}{lang}/index.html">{ui("Home", lang)} ({LANG_LABELS[lang]})</a>
     {sibling_link}
     {src_toggle}
   </nav>
@@ -486,6 +851,8 @@ def page_template(*, title: str, lang: str, body: str, sidebar: str,
   {src_panel}
 </div>
 {page_data}
+<script type="application/json" id="portal-i18n">{ui_payload([lang])}</script>
+<script>{UI_JS}</script>
 <script>window.__SOURCES_BASE__ = "{rel_root}{SOURCES_SITE_DIR}/";</script>
 <script defer src="{rel_root}assets/mermaid.min.js"
     onerror="(function(){{var s=document.createElement('script');s.src='{MERMAID_CDN}';s.defer=true;document.head.appendChild(s);}})();"></script>
@@ -712,7 +1079,7 @@ window.addEventListener('DOMContentLoaded', function(){
     panel.id = 'source-panel';
     panel.className = 'source-panel';
     panel.hidden = true;
-    panel.innerHTML = '<div class="sp-head"><span class="sp-title">Source</span><span id="sp-file" class="sp-file"></span><button id="sp-close" class="sp-close">✕</button></div><div id="sp-citations" class="sp-citations"></div><div class="sp-codewrap"><pre id="sp-code" class="sp-code"></pre></div>';
+    panel.innerHTML = '<div class="sp-head"><span class="sp-title">' + portalText('Source') + '</span><span id="sp-file" class="sp-file"></span><button id="sp-close" class="sp-close" title="' + portalText('Close') + '">✕</button></div><div id="sp-citations" class="sp-citations"></div><div class="sp-codewrap"><pre id="sp-code" class="sp-code"></pre></div>';
     var layout = document.querySelector('.layout');
     if (layout) layout.appendChild(panel);
   }
@@ -758,16 +1125,16 @@ function attachMermaidZoom(root){
 
         var minus = document.createElement('button');
         minus.type = 'button';
-        minus.title = 'Zoom out';
+        minus.title = portalText('Zoom out');
         minus.textContent = '−';
         var plus = document.createElement('button');
         plus.type = 'button';
-        plus.title = 'Zoom in';
+        plus.title = portalText('Zoom in');
         plus.textContent = '+';
         var reset = document.createElement('button');
         reset.type = 'button';
-        reset.title = 'Reset zoom';
-        reset.textContent = 'Reset';
+        reset.title = portalText('Reset zoom');
+        reset.textContent = portalText('Reset');
         var level = document.createElement('span');
         level.className = 'mermaid-zoom-level';
 
@@ -839,7 +1206,7 @@ window.addEventListener('DOMContentLoaded', function(){
     toggle.id = 'src-toggle';
     toggle.className = 'src-toggle';
     toggle.textContent = '⟨/⟩';
-    toggle.title = 'Show source code';
+    toggle.title = portalText('Show source code');
     var topnav = document.querySelector('.topnav');
     if (topnav) topnav.insertBefore(toggle, topnav.firstChild);
   }
@@ -879,16 +1246,16 @@ window.addEventListener('DOMContentLoaded', function(){
 
             var minus = document.createElement('button');
             minus.type = 'button';
-            minus.title = 'Zoom out';
+            minus.title = portalText('Zoom out');
             minus.textContent = '−';
             var plus = document.createElement('button');
             plus.type = 'button';
-            plus.title = 'Zoom in';
+            plus.title = portalText('Zoom in');
             plus.textContent = '+';
             var reset = document.createElement('button');
             reset.type = 'button';
-            reset.title = 'Reset zoom';
-            reset.textContent = 'Reset';
+            reset.title = portalText('Reset zoom');
+            reset.textContent = portalText('Reset');
             var level = document.createElement('span');
             level.className = 'mermaid-zoom-level';
 
@@ -938,7 +1305,7 @@ window.addEventListener('DOMContentLoaded', function(){
       var btn = document.createElement('button');
       var label = (c.start === c.end) ? ('L' + c.start) : ('L' + c.start + '-L' + c.end);
       btn.textContent = cid.replace(/^src-/,'§') + ' · ' + label;
-      btn.title = c.source_rel + ' · confidence ' + c.conf;
+      btn.title = c.source_rel + ' · ' + portalText('confidence') + ' ' + c.conf;
       btn.dataset.cid = cid;
       btn.addEventListener('click', function(){ showCitation(cid); });
       citesEl.appendChild(btn);
@@ -986,7 +1353,7 @@ window.addEventListener('DOMContentLoaded', function(){
     activeCid = cid;
     setActiveButton(cid);
     if (!c.slug) {
-      codeEl.innerHTML = '<div class="sp-error">Source file not bundled: ' + htmlEscape(c.source_rel) + '</div>';
+      codeEl.innerHTML = '<div class="sp-error">' + portalText('Source file not bundled: ') + htmlEscape(c.source_rel) + '</div>';
       fileEl.textContent = c.source_rel;
       return;
     }
@@ -1001,7 +1368,7 @@ window.addEventListener('DOMContentLoaded', function(){
       highlightRange(c.start, c.end);
       return;
     }
-    codeEl.innerHTML = '<div class="sp-loading">Loading…</div>';
+    codeEl.innerHTML = '<div class="sp-loading">' + portalText('Loading…') + '</div>';
     fetch(SOURCES_BASE + c.slug + '.txt')
       .then(function(r){ if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function(txt){
@@ -1011,7 +1378,7 @@ window.addEventListener('DOMContentLoaded', function(){
         highlightRange(c.start, c.end);
       })
       .catch(function(e){
-        codeEl.innerHTML = '<div class="sp-error">Failed to load source (' + e.message + ').</div>';
+        codeEl.innerHTML = '<div class="sp-error">' + portalText('Failed to load source: ') + htmlEscape(e.message) + '</div>';
       });
   }
 
@@ -1042,8 +1409,8 @@ window.addEventListener('DOMContentLoaded', function(){
     var btn = document.createElement('button');
     btn.className = 'src-btn';
     btn.type = 'button';
-    btn.textContent = 'source';
-    btn.title = 'Show source for this section (' + ids.join(', ') + ')';
+    btn.textContent = portalText('source');
+    btn.title = portalText('Show source for this section') + ' (' + ids.join(', ') + ')';
     btn.addEventListener('click', function(ev){
       ev.preventDefault();
       openPanel(ids[0]);
@@ -1089,11 +1456,15 @@ SOURCE_VIEWER_JS = r"""
   if (!codeEl || !selEl || !langEl) return;
 
   var SOURCES_BASE = window.__SOURCES_BASE__ || '';
-  var langs = data.langs || ['en','it'];
+  var langs = data.langs;
   var labels = data.langLabels || {};
+  var requestedLang = new URL(location.href).searchParams.get('lang');
   var savedLang = null;
   try { savedLang = localStorage.getItem('org-viewer-lang'); } catch(e){}
-  var currentLang = (savedLang && langs.indexOf(savedLang) >= 0) ? savedLang : langs[0];
+  var currentLang = langs.indexOf(requestedLang) >= 0 ? requestedLang :
+    ((savedLang && langs.indexOf(savedLang) >= 0) ? savedLang : langs[0]);
+  applyPortalLanguage(currentLang);
+  document.title = data.bundle + ' — ' + portalText('source viewer');
     var stateKey = 'org-viewer-state:' + (data.bundle || 'default');
     var savedState = null;
     try { savedState = JSON.parse(sessionStorage.getItem(stateKey) || 'null'); } catch(e) {}
@@ -1127,16 +1498,16 @@ SOURCE_VIEWER_JS = r"""
 
             var minus = document.createElement('button');
             minus.type = 'button';
-            minus.title = 'Zoom out';
+            minus.title = portalText('Zoom out');
             minus.textContent = '−';
             var plus = document.createElement('button');
             plus.type = 'button';
-            plus.title = 'Zoom in';
+            plus.title = portalText('Zoom in');
             plus.textContent = '+';
             var reset = document.createElement('button');
             reset.type = 'button';
-            reset.title = 'Reset zoom';
-            reset.textContent = 'Reset';
+            reset.title = portalText('Reset zoom');
+            reset.textContent = portalText('Reset');
             var level = document.createElement('span');
             level.className = 'mermaid-zoom-level';
 
@@ -1189,13 +1560,16 @@ SOURCE_VIEWER_JS = r"""
   });
 
   function setLang(lang){
-    if (lang === currentLang) return;
+    if (langs.indexOf(lang) < 0 || lang === currentLang) return;
     currentLang = lang;
+    applyPortalLanguage(lang);
+    document.title = data.bundle + ' — ' + portalText('source viewer');
     try { localStorage.setItem('org-viewer-lang', lang); } catch(e){}
     Array.prototype.forEach.call(langEl.children, function(b){
       b.classList.toggle('active', b.dataset.lang === lang);
     });
     renderBundleDocs();
+    renderChunkLabels();
     if (activeChunkId) {
       var c = chunkById(activeChunkId);
       if (c) loadChunkDoc(c);
@@ -1250,7 +1624,7 @@ SOURCE_VIEWER_JS = r"""
   });
   Object.keys(groups).sort().forEach(function(kind){
     var og = document.createElement('optgroup');
-    og.label = kind + ' (' + groups[kind].length + ')';
+    og.dataset.kind = kind;
     groups[kind].sort(function(a,b){ return a.start - b.start; }).forEach(function(c){
       var opt = document.createElement('option');
       opt.value = c.id;
@@ -1259,6 +1633,12 @@ SOURCE_VIEWER_JS = r"""
     });
     selEl.appendChild(og);
   });
+  function renderChunkLabels(){
+    selEl.querySelectorAll('optgroup').forEach(function(og){
+      og.label = portalText(og.dataset.kind) + ' (' + groups[og.dataset.kind].length + ')';
+    });
+  }
+  renderChunkLabels();
   selEl.addEventListener('change', function(){
     var c = chunkById(selEl.value);
     if (c) activateChunk(c, true);
@@ -1352,40 +1732,25 @@ SOURCE_VIEWER_JS = r"""
 
   // ---- Load and inject per-chunk documentation -------------------
   function loadChunkDoc(chunk){
+        var requestLang = currentLang;
         var docMap = (chunk.docUrls || {});
         var url = docMap[currentLang];
-        var effectiveLang = currentLang;
-        if (!url) {
-            var alt = langs.find(function(l){ return docMap[l]; });
-            if (alt) {
-                url = docMap[alt];
-                effectiveLang = alt;
-            }
-        }
-    titleEl.textContent = chunk.name + '  ·  ' + chunk.kind +
+    titleEl.removeAttribute('data-i18n');
+    titleEl.textContent = chunk.name + '  ·  ' + portalText(chunk.kind) +
       '  (L' + chunk.start + '-L' + chunk.end + ')';
     if (!url) {
-            var altLang = langs.find(function(l){ return docMap[l]; });
-      if (altLang) {
-        docBody.innerHTML = '<p class="sv-empty">No documentation in ' +
-          (labels[currentLang] || currentLang) + ' — try ' +
-          (labels[altLang] || altLang) + '.</p>';
-      } else {
-        docBody.innerHTML = '<p class="sv-empty">No per-chunk documentation available for this chunk.</p>';
-      }
+      docBody.innerHTML = '<p class="sv-empty">' +
+        portalText('No documentation available for this chunk in the selected language.') + '</p>';
       openEl.hidden = true;
       return;
     }
-        if (effectiveLang !== currentLang) {
-            titleEl.textContent += '  ·  ' + (labels[effectiveLang] || effectiveLang).toUpperCase();
-        }
     openEl.hidden = false;
     openEl.href = url;
     if (docCache[url]) {
       injectDoc(docCache[url], url);
       return;
     }
-    docBody.innerHTML = '<p class="sv-loading">Loading…</p>';
+    docBody.innerHTML = '<p class="sv-loading">' + portalText('Loading…') + '</p>';
     fetch(url)
       .then(function(r){ if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function(html){
@@ -1394,10 +1759,12 @@ SOURCE_VIEWER_JS = r"""
         var article = doc.querySelector('article.markdown-body');
         var inner = article ? article.innerHTML : html;
         docCache[url] = inner;
+        if (currentLang !== requestLang || activeChunkId !== chunk.id) return;
         injectDoc(inner, url);
       })
       .catch(function(e){
-        docBody.innerHTML = '<p class="sv-error">Failed to load documentation: ' + e.message + '</p>';
+        if (currentLang !== requestLang || activeChunkId !== chunk.id) return;
+        docBody.innerHTML = '<p class="sv-error">' + portalText('Failed to load documentation: ') + htmlEscape(e.message) + '</p>';
       });
   }
 
@@ -1468,7 +1835,7 @@ SOURCE_VIEWER_JS = r"""
     .then(function(txt){
       renderCode(txt);
             // Restore last selected chunk for this bundle when available.
-            if (savedState && savedState.lang && langs.indexOf(savedState.lang) >= 0 && savedState.lang !== currentLang) {
+            if (langs.indexOf(requestedLang) < 0 && savedState && savedState.lang && langs.indexOf(savedState.lang) >= 0 && savedState.lang !== currentLang) {
                 setLang(savedState.lang);
             }
             if (savedState && savedState.chunkId) {
@@ -1486,7 +1853,7 @@ SOURCE_VIEWER_JS = r"""
       }
     })
     .catch(function(e){
-      codeEl.innerHTML = '<div class="sv-error">Failed to load source: ' + e.message + '</div>';
+      codeEl.innerHTML = '<div class="sv-error">' + portalText('Failed to load source: ') + htmlEscape(e.message) + '</div>';
     });
 })();
 """
@@ -1616,7 +1983,7 @@ def write_source_viewer(bundle_name: str, src_entry: dict) -> str | None:
             if md.is_file():
                 html_path = md_to_html_path(md, lang)
                 rel = Path("..") / html_path.relative_to(SITE_ROOT)
-                entries[label] = rel.as_posix()
+                entries[ui(label, lang)] = rel.as_posix()
         if entries:
             bundle_docs[lang] = entries
 
@@ -1628,15 +1995,28 @@ def write_source_viewer(bundle_name: str, src_entry: dict) -> str | None:
         "chunks": chunks,
         "bundleDocs": bundle_docs,
         "langs": list(LANGS),
-        "langLabels": LANG_LABELS,
+        "langLabels": {lang: LANG_LABELS[lang] for lang in LANGS},
     }
-    payload = json.dumps(viewer_data, ensure_ascii=False)
+    payload = json.dumps(viewer_data, ensure_ascii=False).replace("<", "\\u003c")
+    lang = LANGS[0]
+    messages = {
+        "jump": "Jump to:", "select": "select chunk",
+        "hint": "Hover or click a chunk on the left, or pick one from the dropdown.",
+        "open": "Open full page", "empty": "No chunk selected.",
+    }
 
     body = SOURCE_VIEWER_BODY.format(
         bundle_label=html.escape(bundle_name),
+        **{key: html.escape(ui(value, lang)) for key, value in messages.items()},
     )
     page = SOURCE_VIEWER_TEMPLATE.format(
-        title=html.escape(f"{bundle_name} — source viewer"),
+        title=html.escape(f'{bundle_name} — {ui("source viewer", lang)}'),
+        lang=lang,
+        home_links="\n".join(
+            f'<a href="../{code}/index.html">{ui("Home", code)} ({LANG_LABELS[code]})</a>' for code in LANGS
+        ),
+        ui_payload=ui_payload(LANGS),
+        ui_js=UI_JS,
         rel_root="../",
         sources_base="",  # already in _sources/ — fetch by relative slug
         viewer_payload=payload,
@@ -1658,8 +2038,8 @@ SOURCE_VIEWER_BODY = """
     <code class="sv-path" id="sv-path"></code>
   </span>
   <span class="sv-chunk-picker">
-    <label for="sv-chunk-select">Jump to:</label>
-    <select id="sv-chunk-select"><option value="">— select chunk —</option></select>
+    <label for="sv-chunk-select" data-i18n="Jump to:">{jump}</label>
+    <select id="sv-chunk-select"><option value="" data-i18n="select chunk">{select}</option></select>
   </span>
   <span class="sv-lang-switch" id="sv-lang-switch"></span>
 </div>
@@ -1670,18 +2050,18 @@ SOURCE_VIEWER_BODY = """
   </section>
   <section class="sv-right">
     <header class="sv-doc-head">
-      <span id="sv-doc-title">Hover or click a chunk on the left, or pick one from the dropdown.</span>
-      <a id="sv-doc-open" class="sv-doc-open" target="_blank" rel="noopener" hidden>Open full page ↗</a>
+      <span id="sv-doc-title" data-i18n="Hover or click a chunk on the left, or pick one from the dropdown.">{hint}</span>
+      <a id="sv-doc-open" data-i18n="Open full page" class="sv-doc-open" target="_blank" rel="noopener" hidden>{open}</a>
     </header>
     <article id="sv-doc-body" class="markdown-body sv-doc-body">
-      <p class="sv-empty">No chunk selected.</p>
+      <p class="sv-empty" data-i18n="No chunk selected.">{empty}</p>
     </article>
   </section>
 </div>
 """
 
 SOURCE_VIEWER_TEMPLATE = """<!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1692,12 +2072,13 @@ SOURCE_VIEWER_TEMPLATE = """<!DOCTYPE html>
 <header class="topbar">
   <a class="brand" href="{rel_root}index.html">DEMO COBOL Modernization</a>
   <nav class="topnav">
-    <a href="{rel_root}en/index.html">English home</a>
-    <a href="{rel_root}it/index.html">Italiano home</a>
+    {home_links}
   </nav>
 </header>
 {body}
 <script type="application/json" id="sv-data">{viewer_payload}</script>
+<script type="application/json" id="portal-i18n">{ui_payload}</script>
+<script>{ui_js}</script>
 <script>window.__SOURCES_BASE__ = "{sources_base}";</script>
 <script defer src="{rel_root}assets/mermaid.min.js"
     onerror="(function(){{var s=document.createElement('script');s.src='{mermaid_cdn}';s.defer=true;document.head.appendChild(s);}})();"></script>
@@ -2026,39 +2407,39 @@ def build_sidebar(bundles: list[dict], lang: str, current_html: Path) -> str:
     groups = [b for b in bundles if b["group"]]
     parts.append('<ul>')
     for b in files:
-        parts.append(_bundle_html(b, href))
+        parts.append(_bundle_html(b, href, lang))
     parts.append('</ul>')
     if groups:
-        parts.append('<h3>Groups</h3><ul>')
+        parts.append(f'<h3>{ui("Groups", lang)}</h3><ul>')
         for b in groups:
-            parts.append(_bundle_html(b, href))
+            parts.append(_bundle_html(b, href, lang))
         parts.append('</ul>')
     if SHARED_GLOSSARY_MD.exists():
         glossary_html = shared_md_to_html_path(SHARED_GLOSSARY_MD)
-        parts.append('<h3>Shared</h3><ul>')
-        parts.append(f'<li><a href="{href(glossary_html)}">Central glossary</a></li>')
+        parts.append(f'<h3>{ui("Shared", lang)}</h3><ul>')
+        parts.append(f'<li><a href="{href(glossary_html)}">{ui("Central glossary", lang)}</a></li>')
         parts.append('</ul>')
     return "\n".join(parts)
 
 
-def _bundle_html(b: dict, href) -> str:
+def _bundle_html(b: dict, href, lang: str = "en") -> str:
     out = [f'<li><details><summary>{html.escape(b["name"])}</summary><ul>']
     viewer_url = VIEWER_BY_BUNDLE.get(b["name"])
     if viewer_url:
         viewer_path = SITE_ROOT / viewer_url
-        out.append(f'<li><a href="{href(viewer_path)}" class="source-code-link" title="View source code with split-panel documentation">📄 Source Code</a></li>')
+        out.append(f'<li><a href="{href(viewer_path)}?lang={lang}" class="source-code-link" title="{ui("View source code with split-panel documentation", lang)}">📄 {ui("Source Code", lang)}</a></li>')
     for leaf in b["leaves"]:
-        out.append(f'<li><a href="{href(leaf["html"])}">{html.escape(leaf["label"])}</a></li>')
+        out.append(f'<li><a href="{href(leaf["html"])}">{html.escape(ui(leaf["label"], lang))}</a></li>')
     if b["sections"]:
-        out.append('<li><details open><summary>Sections</summary><ul>')
+        out.append(f'<li><details open><summary>{ui("Sections", lang)}</summary><ul>')
         for node in b["sections"]:
-            out.append(_section_node_html(node, href))
+            out.append(_section_node_html(node, href, lang))
         out.append('</ul></details></li>')
     out.append('</ul></details></li>')
     return "\n".join(out)
 
 
-def _section_node_html(node: dict, href) -> str:
+def _section_node_html(node: dict, href, lang: str = "en") -> str:
     """Render one section-tree node. Internal nodes use <details>; leaves
     use <a>. Internal nodes that also have a backing .md file expose a
     small ``·`` link next to the summary so the self-doc remains reachable.
@@ -2085,12 +2466,12 @@ def _section_node_html(node: dict, href) -> str:
     if summary_target is not None:
         summary = (
             f'<a href="{href(summary_target)}" class="sec-summary-link"'
-            f' onclick="event.stopPropagation();" title="Open section page">'
+            f' onclick="event.stopPropagation();" title="{ui("Open section page", lang)}">'
             f'{label_html}</a>'
         )
     inner = ['<ul>']
     for child in node["children"]:
-        inner.append(_section_node_html(child, href))
+        inner.append(_section_node_html(child, href, lang))
     inner.append('</ul>')
     return (f'<li><details><summary>{summary}</summary>'
             + "\n".join(inner) + '</details></li>')
@@ -2098,7 +2479,7 @@ def _section_node_html(node: dict, href) -> str:
 
 def build_breadcrumb(md: Path, lang: str, rel_root: str) -> str:
     parts = md.relative_to(DOCS_ROOT / lang).parts
-    crumbs = [f'<a href="{rel_root}index.html">Home</a>',
+    crumbs = [f'<a href="{rel_root}index.html">{ui("Home", lang)}</a>',
               f'<a href="{rel_root}{lang}/index.html">{LANG_LABELS[lang]}</a>']
     for p in parts[:-1]:
         crumbs.append(html.escape(p))
@@ -2108,6 +2489,8 @@ def build_breadcrumb(md: Path, lang: str, rel_root: str) -> str:
 
 def sibling_html_url(md: Path, lang: str, dst: Path) -> str | None:
     other = "it" if lang == "en" else "en"
+    if other not in LANGS:
+        return None
     rel = md.relative_to(DOCS_ROOT / lang)
     other_md = DOCS_ROOT / other / rel
     if not other_md.is_file():
@@ -2123,13 +2506,12 @@ def render_page(md_path: Path, lang: str, bundles: list[dict],
                 md_engine: markdown.Markdown) -> None:
     dst = md_to_html_path(md_path, lang)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    md_engine.reset()
     raw = md_path.read_text(encoding="utf-8", errors="ignore")
     raw = strip_hidden_sections(raw)
     citations = parse_citations(raw)
     # Heading-level "source" badges intentionally disabled: only the page
     # title (h1) and the inline L<n> citation chips open the source panel.
-    body = md_engine.convert(raw)
+    body = render_markdown(raw, md_engine, lang)
     body = fixup_links(body, md_path, dst)
     body = figurize_images(body)
 
@@ -2146,11 +2528,11 @@ def render_page(md_path: Path, lang: str, bundles: list[dict],
     if bundle_name and bundle_name in VIEWER_BY_BUNDLE:
         viewer_target = SITE_ROOT / VIEWER_BY_BUNDLE[bundle_name]
         ups = "../" * (len(dst.parent.relative_to(SITE_ROOT).parts))
-        viewer_url = ups + viewer_target.relative_to(SITE_ROOT).as_posix()
+        viewer_url = ups + viewer_target.relative_to(SITE_ROOT).as_posix() + f"?lang={lang}"
 
     has_panel = bool(citations)
-    body = inject_title_source_link(body, viewer_url, has_sources=has_panel)
-    body = linkify_citation_refs(body, citations, viewer_url, has_sources=has_panel)
+    body = inject_title_source_link(body, viewer_url, has_sources=has_panel, lang=lang)
+    body = linkify_citation_refs(body, citations, viewer_url, has_sources=has_panel, lang=lang)
 
     title = read_title(md_path)
     sidebar = build_sidebar(bundles, lang, dst)
@@ -2177,25 +2559,23 @@ def render_page(md_path: Path, lang: str, bundles: list[dict],
 
 
 def render_shared_page(md_path: Path, bundles: list[dict],
-                       md_engine: markdown.Markdown) -> None:
+                       md_engine: markdown.Markdown, lang: str = "en") -> None:
     """Render docs/_*.md pages to site/_shared_pages/*.html."""
     dst = shared_md_to_html_path(md_path)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    md_engine.reset()
     raw = md_path.read_text(encoding="utf-8", errors="ignore")
     raw = strip_hidden_sections(raw)
-    body = md_engine.convert(raw)
+    body = render_markdown(raw, md_engine, "en")
     body = fixup_links(body, md_path, dst)
     body = figurize_images(body)
 
     title = read_title(md_path)
-    # Reuse EN sidebar so shared pages are reachable from the same nav tree.
-    sidebar = build_sidebar(bundles, "en", dst)
+    sidebar = build_sidebar(bundles, lang, dst)
     rel_root = "../" * (len(dst.parent.relative_to(SITE_ROOT).parts))
-    breadcrumb = '<a href="../index.html">Home</a> / Shared / ' + html.escape(md_path.name)
+    breadcrumb = '<a href="../index.html">Home</a> / ' + ui("Shared", lang) + ' / ' + html.escape(md_path.name)
     page = page_template(
         title=title,
-        lang="en",
+        lang=lang,
         body=body,
         sidebar=sidebar,
         rel_root=rel_root,
@@ -2210,29 +2590,33 @@ def render_shared_page(md_path: Path, bundles: list[dict],
 
 def write_landing(active_langs: list[str]) -> None:
     SITE_ROOT.mkdir(parents=True, exist_ok=True)
+    lang = active_langs[0]
     glossary_link = ""
     if SHARED_GLOSSARY_MD.exists():
         glossary_rel = shared_md_to_html_path(SHARED_GLOSSARY_MD).relative_to(SITE_ROOT).as_posix()
-        glossary_link = f'<p><a href="{glossary_rel}">Open central glossary</a></p>'
+        glossary_link = f'<p><a href="{glossary_rel}">{ui("Open central glossary", lang)}</a></p>'
     cards = "\n  ".join(
         f'<a href="{lang}/index.html">{html.escape(LANG_LABELS[lang])}</a>'
         for lang in active_langs
     )
     html_body = """<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DEMO COBOL Modernization — Documentation Portal</title>
+<title>DEMO COBOL Modernization — {title}</title>
 <link rel="stylesheet" href="assets/style.css"></head>
 <body>
 <header class="topbar"><a class="brand" href="index.html">DEMO COBOL Modernization</a></header>
 <div class="landing">
-<h1>Documentation portal</h1>
-<p>Bilingual reverse-engineering deliverables for the sample COBOL workspace.
-Pick a language to start browsing programs, JCL jobs, and groups.</p>
+<h1>{title}</h1>
+<p>{intro}</p>
 <div class="lang-cards">
   {cards}
 </div>
-</div>{glossary_link}</body></html>""".format(cards=cards, glossary_link=glossary_link)
+</div>{glossary_link}</body></html>""".format(
+        cards=cards, glossary_link=glossary_link, lang=lang,
+        title=ui("Documentation portal", lang),
+        intro=ui("Pick a language to browse programs, JCL jobs, and groups.", lang),
+    )
     (SITE_ROOT / "index.html").write_text(html_body, encoding="utf-8")
 
 
@@ -2265,24 +2649,24 @@ def write_lang_index(lang: str, bundles: list[dict]) -> None:
         main_link = f'<a href="{ups}{rel}">{html.escape(b["name"])}</a>'
         viewer_url = VIEWER_BY_BUNDLE.get(b["name"])
         if viewer_url:
-            main_link += (f' <a class="sv-source-link" href="{ups}{viewer_url}"'
-                          f' title="Open the side-by-side source viewer">source ☰</a>')
+            main_link += (f' <a class="sv-source-link" href="{ups}{viewer_url}?lang={lang}"'
+                          f' title="{ui("Open the side-by-side source viewer", lang)}">{ui("source", lang)} ☰</a>')
         return main_link
 
     glossary_block = ""
     if SHARED_GLOSSARY_MD.exists():
         glossary_rel = rel_url(shared_md_to_html_path(SHARED_GLOSSARY_MD), dst)
-        glossary_block = f"<h2>Shared resources</h2>\n<ul><li><a href=\"{glossary_rel}\">Central glossary</a></li></ul>"
+        glossary_block = f'<h2>{ui("Shared resources", lang)}</h2>\n<ul><li><a href="{glossary_rel}">{ui("Central glossary", lang)}</a></li></ul>'
 
-    body = f"""<h1>{LANG_LABELS[lang]} — index</h1>
-<h2>Programs / JCL files</h2>
+    body = f"""<h1>{LANG_LABELS[lang]} — {ui("Index", lang)}</h1>
+<h2>{ui("Programs / JCL files", lang)}</h2>
 <ul>{"".join(f"<li>{link(b)}</li>" for b in files)}</ul>
-<h2>Groups</h2>
+<h2>{ui("Groups", lang)}</h2>
 <ul>{"".join(f"<li>{link(b)}</li>" for b in groups)}</ul>
 {glossary_block}
 """
     sidebar = build_sidebar(bundles, lang, dst)
-    page = page_template(title=f"{LANG_LABELS[lang]} index", lang=lang,
+    page = page_template(title=f'{LANG_LABELS[lang]} {ui("Index", lang)}', lang=lang,
                          body=body, sidebar=sidebar, rel_root="../",
                          sibling_url=None,
                          breadcrumb=f'<a href="../index.html">Home</a> / {LANG_LABELS[lang]}',
@@ -2336,7 +2720,14 @@ def sync_central_glossary(t0: float) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global LANGS
     args = parse_args(argv)
+    LANGS = tuple(resolve_languages(SOURCE_CONFIG_PATH, args.languages)[0].split(","))
+    requested_languages = list(LANGS)
+    for lang in LANGS:
+        LANG_LABELS.setdefault(lang, lang.upper())
+    VIEWER_BY_BUNDLE.clear()
+    SHARED_PAGE_BY_MD.clear()
     source_root = resolve_source_root(args.source_root)
     t0 = time.time()
     sync_central_glossary(t0)
@@ -2375,6 +2766,12 @@ def main(argv: list[str] | None = None) -> int:
     for lang, bundles in bundles_by_lang.items():
         _log("task=collect-bundles", f"lang={lang} bundles={len(bundles)}", t0)
 
+    active_langs = [lang for lang in LANGS
+                    if bundles_by_lang[lang] or list((DOCS_ROOT / lang).rglob("*.md"))]
+    if not active_langs:
+        active_langs = [LANGS[0]]
+    LANGS = tuple(active_langs)
+
     # ---- Source viewers (one per bundle that has a chunk-manifest) ------
     # Enumerate from docs/_shared/<bundle>/chunk-manifest.json so viewers are
     # emitted even when docs/en|it are empty (e.g. after reset-repo.ps1).
@@ -2406,15 +2803,7 @@ def main(argv: list[str] | None = None) -> int:
     _log("task=shared-pages", f"count={len(shared_md_pages)}", t0)
     for shared_md in shared_md_pages:
         _log("task=shared-pages", f"render {shared_md.name}", t0)
-        render_shared_page(shared_md, bundles_by_lang.get("en", []), md_engine)
-
-    # A language is "active" only when it actually has documents to render;
-    # this keeps empty placeholder indexes and dead landing cards out of the
-    # portal (e.g. before the Italian docs have been generated).
-    active_langs = [lang for lang in LANGS
-                    if bundles_by_lang[lang] or list((DOCS_ROOT / lang).rglob("*.md"))]
-    if not active_langs:
-        active_langs = [LANGS[0]]
+        render_shared_page(shared_md, bundles_by_lang[LANGS[0]], md_engine, LANGS[0])
 
     total = 0
     for lang in active_langs:
@@ -2442,6 +2831,7 @@ def main(argv: list[str] | None = None) -> int:
         "source_viewers": len(VIEWER_BY_BUNDLE),
         "shared_pages": len(shared_md_pages),
         "languages": active_langs,
+        "requested_languages": requested_languages,
         "elapsed_seconds": round(time.time() - t0, 2),
     }
     _log("task=manifest", "writing site/manifest.json", t0)

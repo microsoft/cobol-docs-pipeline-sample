@@ -95,6 +95,8 @@ class PipelineLanguageTests(unittest.TestCase):
             "scripts/lib/native-common.sh",
             "scripts/lib/native-phase.sh",
             f"scripts/phases/phase-D-section-docs.{shell}",
+            f"scripts/phases/phase-N-portal.{shell}",
+            f"scripts/portal/build-portal-offline.{shell}",
         ]
         for relative in copies:
             target = root / relative
@@ -120,6 +122,14 @@ class PipelineLanguageTests(unittest.TestCase):
         dispatcher.parent.mkdir()
         dispatcher.write_text(self.probe(shell, "D"), encoding="utf-8", newline="\n")
         dispatcher.chmod(0o755)
+        portal = root / "scripts" / "portal" / "build-portal-offline.py"
+        portal.parent.mkdir(exist_ok=True)
+        portal.write_text(
+            "import sys\n"
+            "value = sys.argv[sys.argv.index('--languages') + 1]\n"
+            "print('LANG:N:' + ','.join(dict.fromkeys(value.split(','))))\n",
+            encoding="utf-8",
+        )
         for phase in ("E", "F", "G", "I", "J", "K", "L", "M"):
             original = next((REPO_ROOT / "scripts" / "phases").glob(f"phase-{phase}-*.{shell}"))
             target = root / "scripts" / "phases" / original.name
@@ -174,7 +184,7 @@ class PipelineLanguageTests(unittest.TestCase):
                     if shell == "ps1":
                         command += ["-NoProfile", "-File"]
                     command += [
-                        f"scripts/run-pipeline.{shell}", "-From", "D", "-To", "M", "-Skip", "H",
+                        f"scripts/run-pipeline.{shell}", "-From", "D", "-To", "N", "-Skip", "H",
                         "-MaxPhaseRetries", "0", *options,
                     ]
                     result = subprocess.run(
@@ -183,8 +193,10 @@ class PipelineLanguageTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     received = re.findall(r"^LANG:([A-Z]):([a-z,-]+)\s*$", result.stdout, re.MULTILINE)
+                    portal_languages = ",".join(dict.fromkeys(",".join(expected).split(",")))
                     self.assertEqual(
-                        received, list(zip(("D", "E", "F", "G", "I", "J", "K", "L", "M"), expected)),
+                        received, list(zip(("D", "E", "F", "G", "I", "J", "K", "L", "M", "N"),
+                                           [*expected, portal_languages])),
                         result.stdout,
                     )
 
@@ -195,6 +207,43 @@ class PipelineLanguageTests(unittest.TestCase):
     @unittest.skipUnless(BASH, "Bash is required")
     def test_bash_pipeline_forwards_languages_through_phase_d(self) -> None:
         self.check_runner(BASH, "sh")
+
+    @unittest.skipUnless(BASH, "Bash is required")
+    def test_bash_prerequisite_batch_stops_pipeline_after_one_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_repository(root, "sh", ["it"])
+            phase = root / "scripts/phases/phase-J-group-requirements.sh"
+            phase.write_text(
+                '#!/usr/bin/env bash\nset -euo pipefail\n'
+                'source scripts/lib/native-common.sh\n'
+                'native_python() { printf "%s\\n" "$TEST_PYTHON"; }\n'
+                'printf "attempt\\n" >> attempts.txt\n'
+                'worker() { return "$1"; }\n'
+                'inputs=(4 1)\n'
+                'native_run_python_batch 1 stage.xml worker inputs\n',
+                encoding="utf-8", newline="\n",
+            )
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            shim = bin_dir / "python3"
+            shim.write_text(
+                f"#!/usr/bin/env bash\nexec {shlex.quote(Path(sys.executable).as_posix())} \"$@\"\n",
+                encoding="utf-8", newline="\n",
+            )
+            shim.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
+            environment["TEST_PYTHON"] = Path(sys.executable).as_posix()
+            result = subprocess.run(
+                [BASH, "scripts/run-pipeline.sh", "-From", "J", "-To", "J", "-MaxPhaseRetries", "3"],
+                cwd=root, env=environment, capture_output=True, text=True, timeout=60,
+            )
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            self.assertEqual((root / "attempts.txt").read_text().splitlines(), ["attempt"])
+            self.assertIn("retry skipped", result.stderr)
+            self.assertIn("<exit>4</exit>", (root / "stage.xml").read_text())
+            self.assertIn("<exit>1</exit>", (root / "stage.xml").read_text())
 
 
 class BundleLanguageTests(unittest.TestCase):
@@ -261,6 +310,116 @@ class BundleLanguageTests(unittest.TestCase):
             cwd=self.root, capture_output=True, text=True, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_group_inputs_honor_upstream_skips_and_profile_reenablement(self) -> None:
+        self.write("config/grouping.yaml", yaml.safe_dump({"groups": [{
+            "id": "demo", "members": [
+                "sources/REC.CPY", "sources/PROG.CBL", "sources/MAP.BMS", "sources/STEP.PRC",
+            ],
+        }]}))
+        for scope, skill, document in (
+            ("req", "requirements-group-writer", "requirements"),
+            ("fa", "functional-analysis-group-writer", "functional-analysis"),
+        ):
+            with self.subTest(scope=scope):
+                markers = []
+                for name in ("REC.CPY", "MAP.BMS"):
+                    markers.append(self.write(
+                        f"docs/_shared/{name}/_{scope}-bundles/_skipped.json",
+                        json.dumps({"source": name, "reason": f"{name}: skipped upstream"}),
+                    ))
+                    # Stale documents must not override current skip decisions.
+                    self.write(f"docs/it/{name}/{document}.md", "# Old document\n")
+                self.run_script(skill, "assemble-inputs.py", "--group-id", "demo", "--languages", "it")
+                bundle_path = self.root / f"docs/_shared/_groups/demo/_{scope}-group-bundles/_finalize.bundle.json"
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                self.assertEqual([m["basename"] for m in bundle["members"]], ["PROG.CBL"])
+                self.assertEqual(len(bundle["skipped_members"]), 3)
+                self.assertIn("REC.CPY: skipped upstream", bundle_path.with_suffix(".md").read_text(encoding="utf-8"))
+
+                # An explicit per-file profile removes the upstream tombstone.
+                for marker in markers:
+                    marker.unlink()
+                self.run_script(skill, "assemble-inputs.py", "--group-id", "demo", "--languages", "it")
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    [m["basename"] for m in bundle["members"]], ["REC.CPY", "PROG.CBL", "MAP.BMS"],
+                )
+
+    def test_group_missing_or_empty_eligible_inputs_return_prerequisite_exit(self) -> None:
+        for scope, skill, document in (
+            ("req", "requirements-group-writer", "requirements"),
+            ("fa", "functional-analysis-group-writer", "functional-analysis"),
+        ):
+            for only_skipped in (False, True):
+                with self.subTest(scope=scope, only_skipped=only_skipped):
+                    self.write("config/grouping.yaml", yaml.safe_dump({"groups": [{
+                        "id": "demo", "members": ["sources/REC.CPY"],
+                    }]}))
+                    if only_skipped:
+                        self.write(f"docs/_shared/REC.CPY/_{scope}-bundles/_skipped.json",
+                                   '{"reason": "intentionally skipped"}')
+                    bundle_path = self.write(
+                        f"docs/_shared/_groups/demo/_{scope}-group-bundles/_finalize.bundle.json", "{}",
+                    )
+                    result = subprocess.run(
+                        [sys.executable, str(self.root / ".github/skills" / skill / "scripts/assemble-inputs.py"),
+                         "--group-id", "demo", "--languages", "it"],
+                        cwd=self.root, capture_output=True, text=True, timeout=30,
+                    )
+                    self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+                    self.assertIn("no eligible" if only_skipped else f"{document}.md missing", result.stderr)
+                    self.assertEqual(bundle_path.read_text(encoding="utf-8"), "{}")
+
+    def test_group_stage_failure_stops_retry_and_does_not_count_stale_finalizer(self) -> None:
+        shells = list(dict.fromkeys(filter(None, (shutil.which("powershell"), shutil.which("pwsh")))))
+        if not shells:
+            self.skipTest("PowerShell is required")
+        for name in ("Invoke-PythonBatch.ps1", "Resolve-PhaseInputs.ps1"):
+            shutil.copy2(REPO_ROOT / "scripts/lib" / name, self.root / "scripts/lib" / name)
+        for scope, skill, document in (
+            ("req", "requirements-group-writer", "requirements"),
+            ("fa", "functional-analysis-group-writer", "functional-analysis"),
+        ):
+            script_name = f"{scope}_group_stage_batch.ps1"
+            script = self.root / ".github/skills" / skill / "scripts" / script_name
+            shutil.copy2(REPO_ROOT / ".github/skills" / skill / "scripts" / script_name, script)
+            (self.root / f"docs/it/PROG.CBL/{document}.md").unlink()
+            for shell in shells:
+                with self.subTest(scope=scope, shell=shell):
+                    probe = self.write("probe.ps1", """
+param([string]$StageScript)
+Add-Content -LiteralPath attempts.txt -Value attempt
+exit (Invoke-PhaseBatch -PhaseId TEST -ResultsXml (Join-Path $PSScriptRoot 'final.xml') `
+  -StepResultsXml (Join-Path $PSScriptRoot 'stage.xml') -Action {
+  & $StageScript -Manifest config/grouping.yaml -Languages it -ResultsXml stage.xml -Throttle 1
+  if ($LASTEXITCODE -ne 0) { return }
+  throw 'Dispatch must not run after a failed stage'
+})
+""")
+                    counter = self.root / "attempts.txt"
+                    counter.unlink(missing_ok=True)
+                    environment = os.environ.copy()
+                    environment.pop("PSMODULEPATH", None)
+                    environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment["PATH"]
+                    environment["STAGE_SCRIPT"] = str(script)
+                    environment["PROBE_SCRIPT"] = str(probe)
+                    result = subprocess.run(
+                        [shell, "-NoProfile", "-Command", """
+. .\\scripts\\lib\\Resolve-PhaseInputs.ps1
+1..9 | ForEach-Object { [pscustomobject]@{ Exit = 0 } } | Export-Clixml final.xml
+$result = Invoke-PhaseWithRetry -PhaseId TEST -PhaseScript $env:PROBE_SCRIPT `
+  -PhaseArgs @{ StageScript = $env:STAGE_SCRIPT } -MaxRetries 3
+exit $result
+"""],
+                        cwd=self.root, env=environment, capture_output=True, text=True, timeout=60,
+                    )
+                    output = result.stdout + result.stderr
+                    self.assertEqual(result.returncode, 4, output)
+                    self.assertEqual(counter.read_text().splitlines(), ["attempt"])
+                    self.assertIn("PHASE-DONE phase=TEST ok=0 failed=1", output)
+                    self.assertIn("retry-skipped", output)
+                    self.assertNotIn("Dispatch must not run", output)
 
     def test_all_bundles_support_italian_without_english_documents(self) -> None:
         cases = [

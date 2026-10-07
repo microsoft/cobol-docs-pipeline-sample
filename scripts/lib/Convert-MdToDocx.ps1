@@ -407,20 +407,34 @@ function Convert-MdToDocx {
     }
   }
 
-  # Redirect pandoc's stderr to a temp file rather than merging it into the
-  # success stream with 2>&1. Pandoc emits benign warnings (e.g. an unused
-  # footnote key) to stderr while still exiting 0; under a caller's
-  # $ErrorActionPreference='Stop' a merged native stderr line is promoted to a
-  # terminating NativeCommandError and aborts the phase. Capturing via a file
-  # keeps warnings as plain text and lets the exit code decide success.
+  # Resolve before relaxing native error handling so a missing executable
+  # cannot be mistaken for a successful invocation.
+  $pandocCommand = Get-Command $PandocPath -CommandType Application -ErrorAction Stop
   $errFile = New-TemporaryFile
   try {
-    & $PandocPath @argv 2>$errFile.FullName
-    $code = $LASTEXITCODE
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+      # Windows PowerShell 5.1 promotes redirected stderr to NativeCommandError.
+      # Let pandoc finish, then use its exit code (not stderr) to decide success.
+      $ErrorActionPreference = 'Continue'
+      $PSNativeCommandUseErrorActionPreference = $false
+      $global:LASTEXITCODE = $null
+      & $pandocCommand.Source @argv 2>$errFile.FullName
+      $code = $global:LASTEXITCODE
+    }
+    finally {
+      $ErrorActionPreference = $savedErrorActionPreference
+    }
+    if ($null -eq $code) {
+      throw "pandoc did not return an exit code for '$MarkdownPath'."
+    }
     $stderr = Get-Content -Raw -LiteralPath $errFile.FullName
   }
   finally {
     Remove-Item -Force -LiteralPath $errFile.FullName -ErrorAction SilentlyContinue
+  }
+  if ($code -eq 0 -and $stderr) {
+    Write-Warning "DOCX converted with pandoc diagnostics: $MarkdownPath :: $($stderr.Trim())"
   }
   return [pscustomobject]@{
     MarkdownPath = $MarkdownPath; OutputPath = $OutputPath

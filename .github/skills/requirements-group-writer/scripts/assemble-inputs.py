@@ -24,6 +24,9 @@ import yaml
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
+from group_member_inputs import select_members
+
 DEFAULT_GROUPING = REPO_ROOT / "config" / "grouping.yaml"
 GLOSSARY_PATH = REPO_ROOT / "docs" / "_glossary.md"
 PROFILE_ROOT = REPO_ROOT / "config" / "templates" / "docs" / "requirements"
@@ -118,10 +121,12 @@ def build_member_record(member: str, languages: list[str]) -> dict:
 
     primary_language = languages[0]
     if not docs[primary_language]["exists"]:
-        raise SystemExit(
+        print(
             f"ERROR: phase-F {primary_language} requirements.md missing for member {basename!r} \u2014 "
-            f"expected docs/{primary_language}/{basename}/requirements.md"
+            f"expected docs/{primary_language}/{basename}/requirements.md",
+            file=sys.stderr,
         )
+        raise SystemExit(EXIT_MISSING_PREREQ)
 
     return {
         "basename": basename,
@@ -163,6 +168,8 @@ def render_markdown_view(bundle: dict) -> str:
     lines.append(f"**Profile:** `{bundle['profile']['name']}`\n")
     lines.append(f"**Requirement id namespace:** `{bundle['req_id_namespace']}`\n")
     lines.append(f"**Members:** {len(bundle['members'])}\n")
+    for skipped in bundle.get("skipped_members", []):
+        lines.append(f"- Excluded `{skipped['source_path']}`: {skipped['reason']}")
     lines.append("\n## Output paths\n")
     for lang, path in bundle["output_paths"].items():
         lines.append(f"- `{lang}` \u2192 `{path}`")
@@ -217,20 +224,12 @@ def main() -> int:
         print(f"ERROR: group {args.group_id!r} has no members.", file=sys.stderr)
         return EXIT_MISSING_PREREQ
 
-    # Per-file phase-F requirements.md is not generated for PROC (*.prc) sources
-    # (see scripts/phases/phase-F-requirements.ps1 'prc-excluded'). Drop PRC
-    # members here so their absent requirements.md does not abort the group bundle.
-    prc_members = [m for m in members if Path(m).suffix.lower() == ".prc"]
-    members = [m for m in members if Path(m).suffix.lower() != ".prc"]
-    if prc_members:
-        print(
-            f"INFO: skipping {len(prc_members)} PRC member(s) with no phase-F requirements.md: "
-            + ", ".join(Path(m).name for m in prc_members),
-            file=sys.stderr,
-        )
+    members, skipped_members = select_members(REPO_ROOT, members, "req")
+    for skipped in skipped_members:
+        print(f"INFO: skipping {skipped['source_path']}: {skipped['reason']}", file=sys.stderr)
     if not members:
         print(
-            f"ERROR: group {args.group_id!r} has no non-PRC members with requirements.",
+            f"ERROR: group {args.group_id!r} has no eligible phase-F requirements inputs.",
             file=sys.stderr,
         )
         return EXIT_MISSING_PREREQ
@@ -259,6 +258,7 @@ def main() -> int:
         "profile": profile,
         "req_id_namespace": f"GRP-{args.group_id}-REQ-NNN",
         "members": member_records,
+        "skipped_members": skipped_members,
         "members_sha": members_sha,
         "group_doc": build_group_doc_info(args.group_id, languages),
         "output_paths": output_paths,

@@ -31,6 +31,7 @@ Output: docs/_portal/site-offline/
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import re
 import shutil
@@ -45,6 +46,8 @@ PORTAL_ROOT = DOCS_ROOT / "_portal"
 DEFAULT_SITE_ROOT = PORTAL_ROOT / "site"
 DEFAULT_OUT_ROOT = PORTAL_ROOT / "site-offline"
 BUILD_SCRIPT = REPO_ROOT / "scripts" / "portal" / "build-portal-static.py"
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "tools"))
+resolve_languages = importlib.import_module("resolve-output-languages").resolve_languages
 
 PAGE_SOURCES_RE = re.compile(
     r'<script type="application/json" id="page-sources">(.*?)</script>',
@@ -109,6 +112,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--source-root",
         help="Source tree passed through to build-portal-static.py.",
     )
+    parser.add_argument("--languages", help="Languages passed to the static builder; defaults to config.")
     parser.add_argument(
         "--skip-build",
         action="store_true",
@@ -127,10 +131,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run_build(source_root: str | None, t0: float) -> int:
+def run_build(source_root: str | None, t0: float, languages: str | None = None) -> int:
     cmd = [sys.executable, str(BUILD_SCRIPT)]
     if source_root:
         cmd += ["--source-root", source_root]
+    if languages:
+        cmd += ["--languages", languages]
     _log("task=build", " ".join(cmd[1:]), t0)
     proc = subprocess.run(cmd, cwd=str(REPO_ROOT))
     return proc.returncode
@@ -257,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.time()
 
     if not args.skip_build:
-        rc = run_build(args.source_root, t0)
+        rc = run_build(args.source_root, t0, args.languages)
         if rc != 0:
             _log("task=build", f"FAILED (exit {rc})", t0)
             return rc
@@ -270,6 +276,16 @@ def main(argv: list[str] | None = None) -> int:
     if out_root == site_root:
         _log("task=error", "--out must differ from --site")
         return 1
+    if args.skip_build:
+        requested = resolve_languages(REPO_ROOT / "config" / "pipeline.yaml", args.languages)[0].split(",")
+        manifest_path = site_root / "manifest.json"
+        if not manifest_path.is_file():
+            _log("task=error", "Cannot verify site languages without manifest.json; rebuild without --skip-build.")
+            return 1
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("requested_languages", manifest.get("languages")) != requested:
+            _log("task=error", "Site languages differ from the requested languages; rebuild without --skip-build.")
+            return 1
 
     _log("task=copy", f"{site_root} -> {out_root}", t0)
     if out_root.exists():

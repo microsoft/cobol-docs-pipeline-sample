@@ -48,7 +48,11 @@ Per-group finalizer scope:
   `docs/_shared/_groups/<group_id>/_fa-group-sections/<lang>/*.md`
 
 Bundles aggregate, per group:
-- Each member's `docs/<lang>/<member>/functional-analysis.md` excerpts (phase G).
+- Each eligible member's `docs/<lang>/<member>/functional-analysis.md` excerpts (phase G).
+- PRC members and members with an upstream `_fa-bundles/_skipped.json` decision
+  are excluded from narrative inputs and recorded in `bundle.skipped_members`.
+  Do not invent functional analysis for them. Other missing primary-language
+  member documents are prerequisite errors (exit 4), not implicit skips.
 - Member narrative inputs and bundle excerpts use `<lang> = bundle.languages[0]`;
   do not require an English intermediate or member inputs in every output language.
 - The group's `docs/<lang>/_groups/<group_id>/requirements.md` excerpts (phase J)

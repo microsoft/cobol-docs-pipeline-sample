@@ -669,7 +669,9 @@ LLM phases vary but are gated and resumable.
 - **Does:** converts every generated Markdown deliverable into a self-contained static HTML
   portal (python-markdown, no MkDocs — fast enough for 1,700+ pages), with a language picker,
   per-page source viewer, citation links and client-side Mermaid rendering. The offline builder
-  inlines fetched resources so the site is browsable directly from disk (`file://`).
+  inlines fetched resources so the site is browsable directly from disk (`file://`). Authoring
+  self-check and author/redaction verification sections remain in source Markdown but are
+  excluded from published pages.
 - **Output:** `docs/_portal/site/**` and `docs/_portal/site-offline/**`.
 
 ---

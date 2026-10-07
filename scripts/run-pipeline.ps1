@@ -96,7 +96,7 @@
   Legacy: when $false, drops phase E from the selected set.
 
 .PARAMETER Languages
-  Shared documentation languages for phases D/E/F/G/I/J/K/L/M.
+  Shared documentation languages for phases D/E/F/G/I/J/K/L/M and portal N.
   Defaults to output.languages in config/pipeline.yaml, then en.
   Only requested languages are included. Explicit phase language options take precedence.
 
@@ -595,7 +595,8 @@ $phasePlan = @(
       $h
     } }
   @{ Id = 'N'; Workspace = $true; Extra = {
-      $h = @{}
+      $portalLanguages = ($resolvedLanguages -join ',').Split(',') | Select-Object -Unique
+      $h = @{ Languages = $portalLanguages -join ',' }
       if ($SourceRoot)     { $h.SourceRoot = $SourceRoot }
       if ($PortalSkipBuild) { $h.SkipBuild = $true }
       if ($PortalSite)     { $h.Site = $PortalSite }
@@ -644,8 +645,7 @@ foreach ($entry in $phasePlan) {
   }
   finally { $env:COBOL_DOCS_COPILOT_MODEL = $previousModel }
   if ($phaseExit -ne 0) {
-    Write-Host ("=== Pipeline aborted at phase {0} after {1} attempt(s) (exit={2}) ===" -f `
-      $id, ($MaxPhaseRetries + 1), $phaseExit)
+    Write-Host ("=== Pipeline aborted at phase {0} (exit={1}) ===" -f $id, $phaseExit)
     exit $phaseExit
   }
 }

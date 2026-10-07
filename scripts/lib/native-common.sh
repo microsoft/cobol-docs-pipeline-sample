@@ -158,7 +158,7 @@ native_run_python_batch() {
   rows_dir="$(mktemp -d)"
   trap 'rm -rf -- "${rows_dir}"' RETURN
 
-  local index=0 running=0 failed=0
+  local index=0 running=0 failed=0 child_exit
   for input in "${inputs_ref[@]}"; do
     (
       local out_file err_file exit_code
@@ -187,12 +187,18 @@ PY
     index=$((index + 1))
     running=$((running + 1))
     if ((running >= throttle)); then
-      wait -n || failed=1
+      if wait -n; then :; else
+        child_exit=$?
+        if ((child_exit == 4)); then failed=4; elif ((failed == 0)); then failed=1; fi
+      fi
       running=$((running - 1))
     fi
   done
   while ((running > 0)); do
-    wait -n || failed=1
+    if wait -n; then :; else
+      child_exit=$?
+      if ((child_exit == 4)); then failed=4; elif ((failed == 0)); then failed=1; fi
+    fi
     running=$((running - 1))
   done
   native_write_results_xml "${results_path}" "${rows_dir}"

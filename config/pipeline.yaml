@@ -106,7 +106,7 @@ pipeline:
 # -CopilotModel overrides this default. Omit default_model to use each agent's
 # model frontmatter, then Copilot automatic selection. Use CLI model IDs here.
 copilot:
-  default_model: "claude-sonnet-4.5"
+  default_model: "auto"
 
 # Modernization configuration — drives the file/group modernizer agents and
 # the cobol-to-target-mapping skill.

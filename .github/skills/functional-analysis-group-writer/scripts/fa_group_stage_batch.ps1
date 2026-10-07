@@ -146,6 +146,7 @@ Write-Host "DONE total=$($results.Count) ok=$ok failed=$($failed.Count) skipped_
 if ($failed.Count -gt 0) {
   Write-Host 'Failures:'
   $failed | ForEach-Object { Write-Host "  [$($_.Exit)] $($_.Path) :: $($_.Stderr)" }
+  if (@($failed | Where-Object { $_.Exit -eq 4 }).Count -gt 0) { exit 4 }
   exit 1
 }
 exit 0

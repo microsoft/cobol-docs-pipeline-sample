@@ -197,7 +197,8 @@ function Invoke-PhaseWithRetry {
 
     .DESCRIPTION
       A retry is triggered by either a non-zero native/script exit code or a
-      terminating PowerShell error. The return value is the final exit code;
+      terminating PowerShell error, except prerequisite exit code 4, which
+      stops immediately. The return value is the final exit code;
       the caller decides whether to abort the pipeline.
   #>
   [CmdletBinding()]
@@ -249,6 +250,12 @@ function Invoke-PhaseWithRetry {
     if ($exitCode -eq 0) {
       return 0
     }
+    if ($exitCode -eq 4) {
+      Write-PhaseEvent -Phase $PhaseId -Event 'step' -Data @{
+        action = 'retry-skipped'; reason = 'missing-prerequisite'; attempt = $attempt; exit = $exitCode
+      }
+      return [int]$exitCode
+    }
     if ($attempt -ge $maxAttempts) {
       return [int]$exitCode
     }
@@ -272,9 +279,10 @@ function Invoke-PhaseBatch {
       The -Action scriptblock invokes the underlying batch wrapper(s)
       and must leave $LASTEXITCODE set. On exit:
         * elapsed wall time is measured
-        * the results XML (if present) is parsed: ok/failed counts come
+        * the last updated results XML (if present) is parsed: ok/failed counts come
           from the file, not from $LASTEXITCODE, so a degraded run with
           ok>0 failed>0 reports honest totals
+          (-StepResultsXml lists intermediate step reports in execution order)
         * a stable copy of the XML is left alongside a timestamped one
           (chunk_results.xml + chunk_results.<utc>.xml) so concurrent runs
           don't overwrite each other
@@ -291,11 +299,19 @@ function Invoke-PhaseBatch {
   param(
     [Parameter(Mandatory)] [string]$PhaseId,
     [Parameter(Mandatory)] [string]$ResultsXml,
-    [Parameter(Mandatory)] [scriptblock]$Action
+    [Parameter(Mandatory)] [scriptblock]$Action,
+    [string[]]$StepResultsXml = @()
   )
 
   Write-PhaseEvent -Phase $PhaseId -Event 'start'
 
+  $resultPaths = @($StepResultsXml) + @($ResultsXml)
+  $previousStamps = @{}
+  foreach ($path in $resultPaths) {
+    $previousStamps[$path] = if (Test-Path -LiteralPath $path) {
+      (Get-Item -LiteralPath $path).LastWriteTimeUtc.Ticks
+    } else { $null }
+  }
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   $childExit = 0
   $caughtError = $null
@@ -318,20 +334,28 @@ function Invoke-PhaseBatch {
   }
   $elapsed = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
 
+  # Use the last completed step of this attempt, never an old finalizer report.
+  $currentResultsXml = $null
+  foreach ($path in $resultPaths) {
+    if ((Test-Path -LiteralPath $path) -and
+        (Get-Item -LiteralPath $path).LastWriteTimeUtc.Ticks -ne $previousStamps[$path]) {
+      $currentResultsXml = $path
+    }
+  }
   # Stable + timestamped copy so concurrent runs don't clobber each other.
-  if (Test-Path -LiteralPath $ResultsXml) {
+  if ($currentResultsXml) {
     $stamp   = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
-    $dir     = Split-Path -Parent $ResultsXml
-    $base    = [System.IO.Path]::GetFileNameWithoutExtension($ResultsXml)
-    $ext     = [System.IO.Path]::GetExtension($ResultsXml)
+    $dir     = Split-Path -Parent $currentResultsXml
+    $base    = [System.IO.Path]::GetFileNameWithoutExtension($currentResultsXml)
+    $ext     = [System.IO.Path]::GetExtension($currentResultsXml)
     $stamped = Join-Path $dir ("{0}.{1}{2}" -f $base, $stamp, $ext)
-    Copy-Item -LiteralPath $ResultsXml -Destination $stamped -Force
+    Copy-Item -LiteralPath $currentResultsXml -Destination $stamped -Force
   }
 
   # Tally from XML regardless of $childExit (catches degraded runs).
   $ok = 0; $failed = 0
-  if (Test-Path -LiteralPath $ResultsXml) {
-    $results = Import-Clixml -LiteralPath $ResultsXml
+  if ($currentResultsXml) {
+    $results = Import-Clixml -LiteralPath $currentResultsXml
     foreach ($r in $results) {
       if ($r.Exit -eq 0) { $ok++ } else { $failed++ }
     }
